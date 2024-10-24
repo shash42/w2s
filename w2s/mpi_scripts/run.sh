@@ -1,9 +1,9 @@
-source ~/miniconda3/etc/profile.d/conda.sh # equivalent to conda init
+source ~/miniforge3/etc/profile.d/conda.sh # equivalent to conda init
 conda activate diff
 
 # optionally parse args
-arg_1 = $1
-arg_2 = $2
+arg_1=$1
+arg_2=$2
 
 # execute python script
 cd ..

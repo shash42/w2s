@@ -78,7 +78,7 @@ def run_train(cfg: SFTConfig):
             "test": splits["test"],
         }
     )
-    weak_predict_dict = {"train": splits["strong_train"], "val": splits["val"]}
+    weak_predict_dict = {"train": splits["strong_train"], "val": splits["val"], "test": splits["test"]}
     train(
         weak_ds_dict,
         model_cfg,
@@ -101,12 +101,14 @@ def run_train(cfg: SFTConfig):
             "test": splits["test"],
         }
     )
+    strong_predict_dict = {"train": splits["strong_train"], "val": splits["val"], "test": splits["test"]}
     train(
         strong_ds_dict,
         model_cfg,
         TrainingArguments(**train_args),
         cfg.to_dict(),
         transfer=False,
+        predict_dict=strong_predict_dict
     )
 
     # load weak predictions
@@ -138,7 +140,7 @@ def run_train(cfg: SFTConfig):
     )
     # assert (weak_train_preds_ds["id"] == w2s_ds_dict["train"]["id"])
     # assert (weak_val_preds_ds["id"] == w2s_ds_dict["val"]["id"])
-    w2s_predict_dict = {"train": splits["strong_train"], "val": splits["val"]}
+    w2s_predict_dict = {"train": splits["strong_train"], "val": splits["val"], "test": splits["test"]}
     train(
         w2s_ds_dict,
         model_cfg,
@@ -150,52 +152,52 @@ def run_train(cfg: SFTConfig):
         acts_dir=shared_root / cfg_name / "w2s" / "activations",
     )
 
-    prev = "w2s"
+    # prev = "w2s"
 
-    # strong-to-strong iterations
-    for s2s_iter in range(cfg.s2s_iters):
+    # # strong-to-strong iterations
+    # for s2s_iter in range(cfg.s2s_iters):
 
-        # load prev predictions
-        prev_preds_root = root / cfg_name / prev / "predictions"
-        print(f"Loading {prev} predictions from {prev_preds_root}")
-        prev_train_preds_ds = load_from_disk(str(prev_preds_root / "train"))
-        prev_val_preds_ds = load_from_disk(str(prev_preds_root / "val"))
+    #     # load prev predictions
+    #     prev_preds_root = root / cfg_name / prev / "predictions"
+    #     print(f"Loading {prev} predictions from {prev_preds_root}")
+    #     prev_train_preds_ds = load_from_disk(str(prev_preds_root / "train"))
+    #     prev_val_preds_ds = load_from_disk(str(prev_preds_root / "val"))
 
-        # train s2s, get predictions
-        print(f"\n\033[32m===== Training s2s model iteration {s2s_iter} =====\033[0m")
-        model_cfg, run_name = get_model_and_run_name(cfg.strong_model_name, f"s2s-{s2s_iter}")
-        train_args["run_name"] = run_name
-        train_args["output_dir"] = str(root / cfg_name / f"s2s-{s2s_iter}")
-        train_args["learning_rate"] = cfg.strong_lr
-        s2s_ds_dict = DatasetDict(
-            {
-                "train": (
-                    splits["strong_train"]
-                    .remove_columns("labels")
-                    .add_column("labels", prev_train_preds_ds["soft_pred"])  # type: ignore
-                ),
-                "val": (
-                    splits["val"]
-                    .remove_columns("labels")
-                    .add_column("labels", prev_val_preds_ds["soft_pred"])
-                ),  # type: ignore
-                "test": splits["test"],
-            }
-        )
-        # assert (prev_train_preds_ds["id"] == s2s_ds_dict["train"]["id"])
-        # assert (prev_val_preds_ds["id"] == s2s_ds_dict["val"]["id"])
-        s2s_predict_dict = {"train": splits["strong_train"], "val": splits["val"]}
-        train(
-            s2s_ds_dict,
-            model_cfg,
-            TrainingArguments(**train_args),
-            cfg.to_dict(),
-            transfer=True,
-            predict_dict=s2s_predict_dict,
-            acts_dir=shared_root / cfg_name / f"s2s-{s2s_iter}" / "activations",
-        )
+    #     # train s2s, get predictions
+    #     print(f"\n\033[32m===== Training s2s model iteration {s2s_iter} =====\033[0m")
+    #     model_cfg, run_name = get_model_and_run_name(cfg.strong_model_name, f"s2s-{s2s_iter}")
+    #     train_args["run_name"] = run_name
+    #     train_args["output_dir"] = str(root / cfg_name / f"s2s-{s2s_iter}")
+    #     train_args["learning_rate"] = cfg.strong_lr
+    #     s2s_ds_dict = DatasetDict(
+    #         {
+    #             "train": (
+    #                 splits["strong_train"]
+    #                 .remove_columns("labels")
+    #                 .add_column("labels", prev_train_preds_ds["soft_pred"])  # type: ignore
+    #             ),
+    #             "val": (
+    #                 splits["val"]
+    #                 .remove_columns("labels")
+    #                 .add_column("labels", prev_val_preds_ds["soft_pred"])
+    #             ),  # type: ignore
+    #             "test": splits["test"],
+    #         }
+    #     )
+    #     # assert (prev_train_preds_ds["id"] == s2s_ds_dict["train"]["id"])
+    #     # assert (prev_val_preds_ds["id"] == s2s_ds_dict["val"]["id"])
+    #     s2s_predict_dict = {"train": splits["strong_train"], "val": splits["val"]}
+    #     train(
+    #         s2s_ds_dict,
+    #         model_cfg,
+    #         TrainingArguments(**train_args),
+    #         cfg.to_dict(),
+    #         transfer=True,
+    #         predict_dict=s2s_predict_dict,
+    #         acts_dir=shared_root / cfg_name / f"s2s-{s2s_iter}" / "activations",
+    #     )
 
-        prev = f"s2s-{s2s_iter}"
+    #     prev = f"s2s-{s2s_iter}"
 
 if __name__ == "__main__":
     run_train(parse(SFTConfig))

@@ -2,7 +2,7 @@ LOGS_DIR=/home/sgoel/w2s/logs/
 executable=/home/sgoel/w2s/w2s/mpi_scripts/run.sh
 
 # Optional args (will be passed to the executable)
-arguments = "sciq" "test1"
+arguments = sciq test1
 
 # Logs
 error = $(LOGS_DIR)/err/job.$(Cluster).$(Process).err

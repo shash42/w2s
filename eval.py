@@ -77,7 +77,6 @@ def run_eval(cfg: SFTConfig, splits, model, tokenizer):
     predict(predict_dict)
     
 def get_model(cfg: SFTConfig, model_name, model_type):
-    root = Path(cfg.results_folder) / cfg.run_name
     shared_root = Path(cfg.results_folder) / cfg.shared_folder
     cfg_name = cfg.dataset
 
@@ -94,13 +93,13 @@ if __name__ == "__main__":
     cfg = parse(SFTConfig)
     splits = prepare_data(cfg)
     #weak_base
-    model, tokenizer, save_dir = get_model(cfg, cfg.weak_model_name, "weak")
+    model, tokenizer, save_dir = get_model(cfg, cfg.weak_model_name, "weak_base")
     run_eval(cfg, splits, model, tokenizer)
 
     #weak_trained
 
     #strong_base
-    model, tokenizer, save_dir = get_model(cfg, cfg.strong_model_name, "strong")
+    model, tokenizer, save_dir = get_model(cfg, cfg.strong_model_name, "strong_base")
     run_eval(cfg, splits, model, tokenizer)
 
     #strong_w2s_trained

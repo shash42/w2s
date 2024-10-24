@@ -1,0 +1,19 @@
+LOGS_DIR=/home/sgoel/w2s/logs/
+executable=/home/sgoel/w2s/mpi_scripts/run.sh
+
+# Optional args (will be passed to the executable)
+arguments = "sciq" "test1"
+
+# Logs
+error = $(LOGS_DIR)/err/job.$(Cluster).$(Process).err
+output = $(LOGS_DIR)/out/job.$(Cluster).$(Process).out
+log = $(LOGS_DIR)/log/job.$(Cluster).$(Process).log
+
+# Specs
+request_memory = 4096
+request_cpus = 1
+request_gpus = 1
+requirements = (TARGET.CUDADeviceName == "NVIDIA A100-SXM4-80GB")
+
+n_jobs = 1
+queue $(n_jobs)

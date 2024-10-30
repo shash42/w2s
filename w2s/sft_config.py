@@ -29,6 +29,7 @@ class SFTConfig(Serializable):
     results_folder: str = "./results"
     run_name: str = "default"
     shared_folder: str = "shared"
+    disable_finetune: bool = False
     disable_lora: bool = False
     lr_schedule: str = "cosine"
     n_warmup_steps: int = 40  # 2 / (1 - 0.95) = 40

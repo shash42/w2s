@@ -34,6 +34,7 @@ class PredictorConfig(ABC):
 class ModelConfig(PredictorConfig):
     name: str
     enable_lora: bool
+    disable_finetune: bool
     lora_modules: Optional[List[str]] = None
 
     def to_dict(self):
@@ -78,7 +79,14 @@ def init_model(tokenizer, cfg: ModelConfig):
     model.score.weight.data *= 0.01
     model.config.problem_type = "single_label_classification"
 
-    if cfg.enable_lora:
+    if cfg.disable_finetune:
+        for name, param in model.named_parameters():
+            if "classifier" in name or "score" in name or "cls" in name:
+                param.requires_grad = True
+            else:
+                param.requires_grad = False
+        
+    elif cfg.enable_lora:
         lora_cfg = LoraConfig(
             target_modules=cfg.lora_modules, task_type=TaskType.SEQ_CLS
         )
@@ -98,9 +106,10 @@ def init_model(tokenizer, cfg: ModelConfig):
         model = get_peft_model(model, lora_cfg)
 
     # put all the trainable (e.g. LoRA) parameters in float32
-    for p in model.parameters():
-        if p.requires_grad:
-            p.data = p.data.float()
+    if cfg.enable_lora:
+        for p in model.parameters():
+            if p.requires_grad:
+                p.data = p.data.float()
 
     return model
 

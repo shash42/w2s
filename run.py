@@ -62,7 +62,7 @@ def run_train(cfg: SFTConfig):
 
     def get_model_and_run_name(model_name, current_name):
         model_last = model_name.split("/")[-1]
-        model_cfg = ModelConfig(name=model_name, enable_lora=not cfg.disable_lora)
+        model_cfg = ModelConfig(name=model_name, enable_lora=not cfg.disable_lora, disable_finetune=cfg.disable_finetune)
         run_name = f"{current_name}-{cfg.run_name}-{cfg.dataset}-{model_last}"
         return model_cfg, run_name
 
@@ -90,8 +90,9 @@ def run_train(cfg: SFTConfig):
     )
 
     # train strong floor without lora
-    print("\n\033[32m===== Training strong model =====\033[0m")
+    print("\n\033[32m===== Training strong floor model =====\033[0m")
     cfg.disable_lora = True
+    cfg.disable_finetune = True
     model_cfg, run_name = get_model_and_run_name(cfg.strong_model_name, "strong")
     train_args["run_name"] = run_name
     train_args["output_dir"] = str(shared_root / cfg_name / "strong_base")
@@ -113,6 +114,7 @@ def run_train(cfg: SFTConfig):
         predict_dict=strong_predict_dict
     )
     cfg.disable_lora = False
+    cfg.disable_finetune = False
 
     # train strong ceil
     print("\n\033[32m===== Training strong model =====\033[0m")

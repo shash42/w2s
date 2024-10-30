@@ -1,22 +1,16 @@
 from pathlib import Path
 import os
-
 import torch
-from datasets import DatasetDict, load_from_disk
 from simple_parsing import parse
-from transformers import (
-    TrainingArguments,
-)
 from w2s.sft_utils import (
     get_gpu_mem_used,
-    move_best_ckpt,
 )
+
+import wandb
 from w2s.roc_auc import roc_auc
 from w2s.ds_registry import load_and_process_dataset
 from w2s.model import ModelConfig, init_tokenizer, init_model
-from w2s.sft import train
 from w2s.sft_config import SFTConfig
-from w2s.utils import get_config_foldername
 
 from transformers import Trainer, DataCollatorWithPadding
 
@@ -90,15 +84,17 @@ def get_model(cfg: SFTConfig, model_name, model_type):
     return model, tokenizer, save_dir
     
 if __name__ == "__main__":
+    os.environ["WANDB_MODE"] = "dryrun"
     cfg = parse(SFTConfig)
     splits = prepare_data(cfg)
     #weak_base
-    model, tokenizer, save_dir = get_model(cfg, cfg.weak_model_name, "weak_base")
-    run_eval(cfg, splits, model, tokenizer)
+    # model, tokenizer, save_dir = get_model(cfg, cfg.weak_model_name, "weak_base")
+    # run_eval(cfg, splits, model, tokenizer)
 
     #weak_trained
 
     #strong_base
+    # wandb.config.update({"model/num_parameters": model.num_parameters()}, allow_val_change=True)
     model, tokenizer, save_dir = get_model(cfg, cfg.strong_model_name, "strong_base")
     run_eval(cfg, splits, model, tokenizer)
 

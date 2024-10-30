@@ -13,7 +13,7 @@ from w2s.model import ModelConfig
 from w2s.sft import train
 from w2s.sft_config import SFTConfig
 from w2s.utils import get_config_foldername
-from eval import run_eval
+
 
 
 def run_train(cfg: SFTConfig):

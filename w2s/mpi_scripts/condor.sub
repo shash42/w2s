@@ -15,6 +15,6 @@ request_cpus = 1
 request_gpus = 1
 requirements = (TARGET.CUDADeviceName == "NVIDIA A100-SXM4-80GB")
 
-datasets = "anli-r2" "sciq" "cola" "ethics-utilitarianism" "hellaswag" "piqa" "sst2" "twitter-sentiment" "boolq" 
+datasets = anli-r2 sciq cola ethics-utilitarianism hellaswag piqa sst2 twitter-sentiment boolq 
 
 queue dataset in $(datasets)

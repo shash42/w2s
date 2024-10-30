@@ -89,6 +89,31 @@ def run_train(cfg: SFTConfig):
         predict_dict=weak_predict_dict,
     )
 
+    # train strong floor without lora
+    print("\n\033[32m===== Training strong model =====\033[0m")
+    cfg.disable_lora = True
+    model_cfg, run_name = get_model_and_run_name(cfg.strong_model_name, "strong")
+    train_args["run_name"] = run_name
+    train_args["output_dir"] = str(shared_root / cfg_name / "strong_base")
+    train_args["learning_rate"] = cfg.strong_lr
+    strong_ds_dict = DatasetDict(
+        {
+            "train": splits["strong_train"],
+            "val": splits["val"],
+            "test": splits["test"],
+        }
+    )
+    strong_predict_dict = {"train": splits["strong_train"], "val": splits["val"], "test": splits["test"]}
+    train(
+        strong_ds_dict,
+        model_cfg,
+        TrainingArguments(**train_args),
+        cfg.to_dict(),
+        transfer=False,
+        predict_dict=strong_predict_dict
+    )
+    cfg.disable_lora = False
+
     # train strong ceil
     print("\n\033[32m===== Training strong model =====\033[0m")
     model_cfg, run_name = get_model_and_run_name(cfg.strong_model_name, "strong")

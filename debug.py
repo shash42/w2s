@@ -68,12 +68,13 @@ def acc_buckets(dsref1, dsref2, dsmain):
     print(buckets)
     return buckets
 
-dsref1 = Dataset.from_file("results/shared/sciq/weak/predictions/test/data-00000-of-00001.arrow")
-print(f"Loaded {len(dsref1)} examples for dsref1, accuracy: {get_acc(dsref1):.2f}%")
-dsref2 = Dataset.from_file("results/shared/sciq/strong/predictions/test/data-00000-of-00001.arrow")
-print(f"Loaded {len(dsref2)} examples for dsref2, accuracy: {get_acc(dsref2):.2f}%")
-dsmain = Dataset.from_file("results/test1/sciq/w2s/predictions/test/data-00000-of-00001.arrow")
-print(f"Loaded {len(dsmain)} examples for dsmain, accuracy: {get_acc(dsmain):.2f}%")
+m1name, m2name, m3name = "weak", "strong_base", "w2s"
+dsref1 = Dataset.from_file(f"results/shared/sciq/{m1name}/predictions/test/data-00000-of-00001.arrow")
+print(f"Loaded {len(dsref1)} examples for {m1name}, accuracy: {get_acc(dsref1):.2f}%")
+dsref2 = Dataset.from_file(f"results/shared/sciq/{m2name}/predictions/test/data-00000-of-00001.arrow")
+print(f"Loaded {len(dsref2)} examples for {m2name}, accuracy: {get_acc(dsref2):.2f}%")
+dsmain = Dataset.from_file(f"results/test1/sciq/{m3name}/predictions/test/data-00000-of-00001.arrow")
+print(f"Loaded {len(dsmain)} examples for {m3name}, accuracy: {get_acc(dsmain):.2f}%")
 
 dsref1, dsref2, dsmain = add_preds(dsref1), add_preds(dsref2), add_preds(dsmain)
 buckets = acc_buckets(dsref1, dsref2, dsmain)
@@ -81,11 +82,11 @@ buckets = acc_buckets(dsref1, dsref2, dsmain)
 for cat in buckets:
     print(f"Category {cat}: Accuracy - {buckets[cat]['correct']/buckets[cat]['total']*100:.2f}% Total - {buckets[cat]['total']}")
 
-print(f"JSD between weak_ft and strong_ft: {get_jsd(dsref1, dsref2):.4f}")
-print(f"JSD between weak_ft and w2s: {get_jsd(dsref1, dsmain):.4f}")
-print(f"JSD between strong_ft and w2s: {get_jsd(dsref2, dsmain):.4f}")
+print(f"JSD between {m1name} and {m2name}: {get_jsd(dsref1, dsref2):.4f}")
+print(f"JSD between {m1name} and {m3name}: {get_jsd(dsref1, dsmain):.4f}")
+print(f"JSD between {m2name} and {m3name}: {get_jsd(dsref2, dsmain):.4f}")
 
-print(f"Kappa between weak_ft and strong_ft: {get_kappa_mcqs(dsref1, dsref2, n_options=2):.4f}")
-print(f"Kappa between weak_ft and w2s: {get_kappa_mcqs(dsref1, dsmain, n_options=2):.4f}")
-print(f"Kappa between strong_ft and w2s: {get_kappa_mcqs(dsref2, dsmain, n_options=2):.4f}")
+print(f"Kappa between {m1name} and {m2name}: {get_kappa_mcqs(dsref1, dsref2, n_options=2):.4f}")
+print(f"Kappa between {m1name} and {m3name}: {get_kappa_mcqs(dsref1, dsmain, n_options=2):.4f}")
+print(f"Kappa between {m2name} and {m3name}: {get_kappa_mcqs(dsref2, dsmain, n_options=2):.4f}")
 

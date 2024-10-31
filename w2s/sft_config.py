@@ -15,7 +15,7 @@ class SFTConfig(Serializable):
     strong_model_name: str = "meta-llama/Meta-Llama-3-8B"
     # name of the dataset to use
     dataset: str = "boolq"
-    n_epochs: float = 1
+    n_epochs: float = 3
     n_train: int = 10_000
     n_val: int = 1_000
     n_test: int = 5_000
@@ -28,7 +28,7 @@ class SFTConfig(Serializable):
     batch_size: int = 32
     results_folder: str = "./results"
     run_name: str = "default"
-    shared_folder: str = "shared"
+    shared_folder: str = "shared3"
     disable_finetune: bool = False
     disable_lora: bool = False
     lr_schedule: str = "cosine"

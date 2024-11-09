@@ -11,8 +11,8 @@ from w2s.sft_utils import literal
 @dataclass
 class SFTConfig(Serializable):
     # name of the model to train
-    weak_model_name: str = "Qwen/Qwen1.5-0.5B"
-    strong_model_name: str = "meta-llama/Meta-Llama-3-8B"
+    weak_model_name: str = "Qwen/Qwen2.5-0.5B"
+    strong_model_name: str = "meta-llama/Meta-Llama-3.1-8B"
     # name of the dataset to use
     dataset: str = "boolq"
     n_epochs: float = 3
@@ -28,7 +28,7 @@ class SFTConfig(Serializable):
     batch_size: int = 32
     results_folder: str = "./results"
     run_name: str = "default"
-    shared_folder: str = "shared3"
+    shared_folder: str = "shared_new_3"
     disable_finetune: bool = False
     disable_lora: bool = False
     lr_schedule: str = "cosine"

@@ -1,6 +1,8 @@
 from datasets import Dataset
 from scipy.spatial.distance import jensenshannon as jsd
 import numpy as np
+from w2s.roc_auc import roc_auc
+import torch
 
 def get_logits(ds):
     return np.array([1-np.array(ds["soft_pred"]), np.array(ds["soft_pred"])]).T
@@ -31,6 +33,11 @@ def get_acc(ds):
     labels = np.array([d["labels"] for d in ds])
     preds = np.array([d["soft_pred"] for d in ds])
     return np.mean(labels == (preds > 0.5))*100
+
+def get_auc(ds):
+    labels = torch.from_numpy(np.array([d["labels"] for d in ds])).float()
+    preds = torch.from_numpy(np.array([d["soft_pred"] for d in ds])).float()
+    return roc_auc(labels, preds)
 
 def add_preds(ds):
     # Initialize predictions as a list
@@ -68,25 +75,11 @@ def acc_buckets(dsref1, dsref2, dsmain):
     print(buckets)
     return buckets
 
-datasets = ['anli-r2', 'boolq', 'cola', 'hellaswag', 'sciq', 'sst2', 'twitter-sentiment']
-
-for dset in datasets:
-    m1name, m2name, m3name, m4name = "weak", "strong_base", "w2s", "strong"
-    print("Dataset:", dset)
-    dsref1 = Dataset.from_file(f"results/shared/{dset}/{m1name}/predictions/test/data-00000-of-00001.arrow")
-    print(f"Loaded {len(dsref1)} examples for {m1name}, accuracy: {get_acc(dsref1):.2f}%")
-    dsref2 = Dataset.from_file(f"results/shared/{dset}/{m2name}/predictions/test/data-00000-of-00001.arrow")
-    print(f"Loaded {len(dsref2)} examples for {m2name}, accuracy: {get_acc(dsref2):.2f}%")
-    dsmain = Dataset.from_file(f"results/test1/{dset}/{m3name}/predictions/test/data-00000-of-00001.arrow")
-    print(f"Loaded {len(dsmain)} examples for {m3name}, accuracy: {get_acc(dsmain):.2f}%")
-    dsref3 = Dataset.from_file(f"results/shared/{dset}/{m4name}/predictions/test/data-00000-of-00001.arrow")
-    print(f"Loaded {len(dsref1)} examples for {m4name}, accuracy: {get_acc(dsref3):.2f}%")
-
+def pretty_print(dsref1, dsref2, dsmain):
     dsref1, dsref2, dsmain = add_preds(dsref1), add_preds(dsref2), add_preds(dsmain)
     buckets = acc_buckets(dsref1, dsref2, dsmain)
-    #pretty print bucket accuracies and totals
     for cat in buckets:
-        print(f"Category {cat}: Accuracy - {buckets[cat]['correct']/buckets[cat]['total']*100:.2f}% Total - {buckets[cat]['total']}")
+        print(f"Category {cat}: Accuracy - {buckets[cat]['correct']/buckets[cat]['total']*100:.2f}%, Total - {buckets[cat]['total']}")
 
     print(f"JSD between {m1name} and {m2name}: {get_jsd(dsref1, dsref2):.4f}")
     print(f"JSD between {m1name} and {m3name}: {get_jsd(dsref1, dsmain):.4f}")
@@ -95,4 +88,22 @@ for dset in datasets:
     print(f"Kappa between {m1name} and {m2name}: {get_kappa_mcqs(dsref1, dsref2, n_options=2):.4f}")
     print(f"Kappa between {m1name} and {m3name}: {get_kappa_mcqs(dsref1, dsmain, n_options=2):.4f}")
     print(f"Kappa between {m2name} and {m3name}: {get_kappa_mcqs(dsref2, dsmain, n_options=2):.4f}")
+
+datasets = ['anli-r2', 'boolq', 'cola', 'ethics-utilitarianism', 'hellaswag', 'sciq', 'piqa', 'sst2', 'twitter-sentiment']
+shared_folder_name = 'shared3'
+test_folder_name = 'test3'
+for dset in datasets:
+    m1name, m2name, m3name, m4name = "weak", "strong_base", "w2s", "strong"
+    print("Dataset:", dset)
+    dsref1 = Dataset.from_file(f"results/{shared_folder_name}/{dset}/{m1name}/predictions/test/data-00000-of-00001.arrow")
+    print(f"Loaded {len(dsref1)} examples for {m1name}, accuracy: {get_acc(dsref1):.2f}%, auc: {get_auc(dsref1):.2f}")
+    dsref2 = Dataset.from_file(f"results/{shared_folder_name}/{dset}/{m2name}/predictions/test/data-00000-of-00001.arrow")
+    print(f"Loaded {len(dsref2)} examples for {m2name}, accuracy: {get_acc(dsref2):.2f}%, auc: {get_auc(dsref2):.2f}")
+    dsmain = Dataset.from_file(f"results/{test_folder_name}/{dset}/{m3name}/predictions/test/data-00000-of-00001.arrow")
+    print(f"Loaded {len(dsmain)} examples for {m3name}, accuracy: {get_acc(dsmain):.2f}%, auc: {get_auc(dsmain):.2f}")
+    dsref3 = Dataset.from_file(f"results/{shared_folder_name}/{dset}/{m4name}/predictions/test/data-00000-of-00001.arrow")
+    print(f"Loaded {len(dsref1)} examples for {m4name}, accuracy: {get_acc(dsref3):.2f}%, auc: {get_auc(dsref3):.2f}")
+    
+    pretty_print(dsref1, dsref2, dsmain)
+    
 

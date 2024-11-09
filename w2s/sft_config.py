@@ -12,7 +12,7 @@ from w2s.sft_utils import literal
 class SFTConfig(Serializable):
     # name of the model to train
     weak_model_name: str = "Qwen/Qwen2.5-0.5B"
-    strong_model_name: str = "meta-llama/Meta-Llama-3.1-8B"
+    strong_model_name: str = "meta-llama/Llama-3.1-8B"
     # name of the dataset to use
     dataset: str = "boolq"
     n_epochs: float = 3

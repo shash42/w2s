@@ -68,7 +68,7 @@ def run_train(cfg: SFTConfig):
 
     # train weak finetune, get predictions
     print("\n\033[32m===== Training weak finetune model =====\033[0m")
-    model_cfg, run_name = get_model_and_run_name(cfg.weak_model_name, "weak")
+    model_cfg, run_name = get_model_and_run_name(cfg.weak_model_name, "weak_ft")
     train_args["run_name"] = run_name
     train_args["output_dir"] = str(shared_root / cfg_name / "weak")
     train_args["learning_rate"] = cfg.weak_lr
@@ -134,7 +134,7 @@ def run_train(cfg: SFTConfig):
     print("\n\033[32m===== Training weak base model =====\033[0m")
     cfg.disable_lora = True
     cfg.disable_finetune = True
-    model_cfg, run_name = get_model_and_run_name(cfg.strong_model_name, "weak")
+    model_cfg, run_name = get_model_and_run_name(cfg.weak_model_name, "weak_base")
     train_args["run_name"] = run_name
     train_args["output_dir"] = str(shared_root / cfg_name / "weak_base")
     train_args["learning_rate"] = cfg.strong_lr
@@ -161,7 +161,7 @@ def run_train(cfg: SFTConfig):
     print("\n\033[32m===== Training strong base model =====\033[0m")
     cfg.disable_lora = True
     cfg.disable_finetune = True
-    model_cfg, run_name = get_model_and_run_name(cfg.strong_model_name, "strong")
+    model_cfg, run_name = get_model_and_run_name(cfg.strong_model_name, "strong_base")
     train_args["run_name"] = run_name
     train_args["output_dir"] = str(shared_root / cfg_name / "strong_base")
     train_args["learning_rate"] = cfg.strong_lr
@@ -186,7 +186,7 @@ def run_train(cfg: SFTConfig):
 
     # train strong ceil
     print("\n\033[32m===== Training strong finetune model (ceil) =====\033[0m")
-    model_cfg, run_name = get_model_and_run_name(cfg.strong_model_name, "strong")
+    model_cfg, run_name = get_model_and_run_name(cfg.strong_model_name, "strong_ft")
     train_args["run_name"] = run_name
     train_args["output_dir"] = str(shared_root / cfg_name / "strong")
     train_args["learning_rate"] = cfg.strong_lr

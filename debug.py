@@ -1,109 +1,98 @@
-from datasets import Dataset
-from scipy.spatial.distance import jensenshannon as jsd
-import numpy as np
-from w2s.roc_auc import roc_auc
+from pathlib import Path
+import os
+
 import torch
+from datasets import DatasetDict, load_from_disk
+from simple_parsing import parse
+from transformers import (
+    TrainingArguments,
+)
 
-def get_logits(ds):
-    return np.array([1-np.array(ds["soft_pred"]), np.array(ds["soft_pred"])]).T
+from w2s.ds_registry import load_and_process_dataset
+from w2s.model import ModelConfig
+from w2s.sft import train
+from w2s.sft_config import SFTConfig
+from w2s.utils import get_config_foldername
 
-def get_jsd(ds1, ds2):
-    return np.mean(jsd(get_logits(ds1), get_logits(ds2)))
 
-def get_kappa_mcqs(m1, m2, n_options=4):
-    same, total, m1_corr, m2_corr, samewrong = 0, 0, 0, 0, 0
-    for s1, s2 in zip(m1, m2):
-        total += 1
-        if s1["pred"] == s2["pred"]:
-            same += 1
-        if s1["pred"] == s1["labels"]:
-            m1_corr += 1
-        if s2["pred"] == s2["labels"]:
-            m2_corr += 1
-        if s1["pred"] == s2["pred"] and s1["pred"] != s1["labels"]:
-            samewrong += 1
-    cobs = same/total
-    p1, p2 = (m1_corr/total), (m2_corr/total)
-    expsamewrong = (1 - p1) * (1 - p2) * 1/(n_options - 1)
-    cexp = p1 * p2 + expsamewrong
-    kappa = (cobs - cexp) / (1 - cexp)
-    return kappa
 
-def get_acc(ds):
-    labels = np.array([d["labels"] for d in ds])
-    preds = np.array([d["soft_pred"] for d in ds])
-    return np.mean(labels == (preds > 0.5))*100
+def run_train(cfg: SFTConfig):
+    print(f"Loading and processing dataset {cfg.dataset}")
+    splits = load_and_process_dataset(
+        cfg.dataset, cfg.n_train, cfg.n_val, cfg.n_test, cfg.n_predict
+    )
 
-def get_auc(ds):
-    labels = torch.from_numpy(np.array([d["labels"] for d in ds])).float()
-    preds = torch.from_numpy(np.array([d["soft_pred"] for d in ds])).float()
-    return roc_auc(labels, preds)
+    train_halves = splits["train"].train_test_split(test_size=0.5, seed=42)
+    splits["weak_train"] = train_halves["train"]
+    splits["strong_train"] = train_halves["test"]
+    cols = ["hard_label", "txt"]
+    splits = splits.select_columns(cols).rename_column("hard_label", "labels")
+    for split in splits:
+        splits[split] = splits[split].add_column("gt_labels", splits[split]["labels"])
 
-def add_preds(ds):
-    # Initialize predictions as a list
-    preds = []
-    for d in ds:
-        # Add prediction to the list based on `soft_pred` value
-        preds.append(d["soft_pred"] > 0.5)
-    # Add the updated predictions list as a new column to the dataset
-    ds = ds.add_column("pred", preds)
-    return ds
+    print(
+        f"Example:\n\n{splits['strong_train'][0]['txt']}\n\nLabel: {splits['strong_train'][0]['labels']}"
+    )
 
-def acc_buckets(dsref1, dsref2, dsmain):
-    buckets = {"cc" : {"correct": 0, "total": 0}, "cw": {"correct": 0, "total": 0}, "wc": {"correct": 0, "total": 0}, "ww": {"correct": 0, "total": 0}}
-    for d1, d2, dsm in zip(dsref1, dsref2, dsmain):
-        if d1["labels"] == d1["pred"]:
-            if d2["labels"] == d2["pred"]: # cc
-                buckets["cc"]["total"] += 1
-                if dsm["labels"] == dsm["pred"]:
-                    buckets["cc"]["correct"] += 1
-            else: # cw
-                buckets["cw"]["total"] += 1
-                if dsm["labels"] == dsm["pred"]:
-                    buckets["cw"]["correct"] += 1
+    root = Path(cfg.results_folder) / cfg.run_name
+    shared_root = Path(cfg.results_folder) / cfg.shared_folder
+    cfg_name = cfg.dataset
+    train_args: dict = dict(
+        num_train_epochs=cfg.n_epochs,
+        adam_beta2=0.95,
+        gradient_accumulation_steps=cfg.batch_size // cfg.minibatch_size,
+        eval_strategy="steps",
+        label_names=["labels"],
+        load_best_model_at_end=cfg.load_best_model_at_end,
+        logging_steps=25,
+        metric_for_best_model=cfg.metric_for_best_model,
+        greater_is_better=cfg.greater_is_better,
+        per_device_train_batch_size=cfg.minibatch_size,
+        per_device_eval_batch_size=cfg.minibatch_size,
+        save_strategy="steps",
+        save_total_limit=cfg.save_total_limit,
+        tf32=True,  # Use Tensor Cores even for fp32 matmuls
+        warmup_steps=cfg.n_warmup_steps,
+        weight_decay=cfg.weight_decay,
+        lr_scheduler_type=cfg.lr_schedule,
+        eval_steps=cfg.eval_every,
+        save_steps=cfg.save_every,
+    )
 
-        else:
-            if d2["labels"] == d2["pred"]: # wc
-                buckets["wc"]["total"] += 1
-                if dsm["labels"] == dsm["pred"]:
-                    buckets["wc"]["correct"] += 1
-            else:
-                buckets["ww"]["total"] += 1
-                if dsm["labels"] == dsm["pred"]:
-                    buckets["ww"]["correct"] += 1
-    
-    print(buckets)
-    return buckets
+    def get_model_and_run_name(model_name, current_name):
+        model_last = model_name.split("/")[-1]
+        model_cfg = ModelConfig(name=model_name, enable_lora=not cfg.disable_lora, disable_finetune=cfg.disable_finetune)
+        run_name = f"{current_name}-{cfg.run_name}-{cfg.dataset}-{model_last}"
+        return model_cfg, run_name
 
-def pretty_print(dsref1, dsref2, dsmain):
-    dsref1, dsref2, dsmain = add_preds(dsref1), add_preds(dsref2), add_preds(dsmain)
-    buckets = acc_buckets(dsref1, dsref2, dsmain)
-    for cat in buckets:
-        print(f"Category {cat}: Accuracy - {buckets[cat]['correct']/buckets[cat]['total']*100:.2f}%, Total - {buckets[cat]['total']}")
-
-    print(f"JSD between {m1name} and {m2name}: {get_jsd(dsref1, dsref2):.4f}")
-    print(f"JSD between {m1name} and {m3name}: {get_jsd(dsref1, dsmain):.4f}")
-    print(f"JSD between {m2name} and {m3name}: {get_jsd(dsref2, dsmain):.4f}")
-
-    print(f"Kappa between {m1name} and {m2name}: {get_kappa_mcqs(dsref1, dsref2, n_options=2):.4f}")
-    print(f"Kappa between {m1name} and {m3name}: {get_kappa_mcqs(dsref1, dsmain, n_options=2):.4f}")
-    print(f"Kappa between {m2name} and {m3name}: {get_kappa_mcqs(dsref2, dsmain, n_options=2):.4f}")
-
-datasets = ['anli-r2', 'boolq', 'cola', 'ethics-utilitarianism', 'hellaswag', 'sciq', 'piqa', 'sst2', 'twitter-sentiment']
-shared_folder_name = 'shared3'
-test_folder_name = 'test3'
-for dset in datasets:
-    m1name, m2name, m3name, m4name = "weak", "strong_base", "w2s", "strong"
-    print("Dataset:", dset)
-    dsref1 = Dataset.from_file(f"results/{shared_folder_name}/{dset}/{m1name}/predictions/test/data-00000-of-00001.arrow")
-    print(f"Loaded {len(dsref1)} examples for {m1name}, accuracy: {get_acc(dsref1):.2f}%, auc: {get_auc(dsref1):.2f}")
-    dsref2 = Dataset.from_file(f"results/{shared_folder_name}/{dset}/{m2name}/predictions/test/data-00000-of-00001.arrow")
-    print(f"Loaded {len(dsref2)} examples for {m2name}, accuracy: {get_acc(dsref2):.2f}%, auc: {get_auc(dsref2):.2f}")
-    dsmain = Dataset.from_file(f"results/{test_folder_name}/{dset}/{m3name}/predictions/test/data-00000-of-00001.arrow")
-    print(f"Loaded {len(dsmain)} examples for {m3name}, accuracy: {get_acc(dsmain):.2f}%, auc: {get_auc(dsmain):.2f}")
-    dsref3 = Dataset.from_file(f"results/{shared_folder_name}/{dset}/{m4name}/predictions/test/data-00000-of-00001.arrow")
-    print(f"Loaded {len(dsref1)} examples for {m4name}, accuracy: {get_acc(dsref3):.2f}%, auc: {get_auc(dsref3):.2f}")
-    
-    pretty_print(dsref1, dsref2, dsmain)
+    # train weak finetune, get predictions
+    print("\n\033[32m===== Training weak base model =====\033[0m")
+    cfg.disable_lora = True
+    cfg.disable_finetune = True
+    model_cfg, run_name = get_model_and_run_name(cfg.weak_model_name, "weak")
+    train_args["run_name"] = run_name
+    train_args["output_dir"] = str(shared_root / cfg_name / "weak")
+    train_args["learning_rate"] = cfg.weak_lr
+    weak_ds_dict = DatasetDict(
+        {
+            "train": splits["weak_train"],
+            "val": splits["val"],
+            "test": splits["test"],
+        }
+    )
+    print(f"Length of train: {len(splits["weak_train"])}, length of val: {len(splits["val"])}, length of test: {len(splits["test"])}")
+    weak_predict_dict = {"train": splits["strong_train"], "val": splits["val"], "test": splits["test"]}
+    train(
+        weak_ds_dict,
+        model_cfg,
+        TrainingArguments(**train_args),
+        cfg.to_dict(),
+        transfer=False,
+        predict_dict=weak_predict_dict,
+    )
+    cfg.disable_lora = False
+    cfg.disable_finetune = False
     
 
+if __name__ == "__main__":
+    run_train(parse(SFTConfig))

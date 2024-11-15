@@ -36,7 +36,6 @@ def run_train(cfg: SFTConfig):
     )
 
     root = Path(cfg.results_folder) / cfg.run_name
-    shared_root = Path(cfg.results_folder) / cfg.shared_folder
     cfg_name = cfg.dataset
     train_args: dict = dict(
         num_train_epochs=cfg.n_epochs,
@@ -69,8 +68,10 @@ def run_train(cfg: SFTConfig):
     # train weak finetune, get predictions
     print("\n\033[32m===== Training weak finetune model =====\033[0m")
     model_cfg, run_name = get_model_and_run_name(cfg.weak_model_name, "weak_ft")
+    weak_model_last_name = cfg.weak_model_name.split("/")[-1]
+    strong_model_last_name = cfg.strong_model_name.split("/")[-1]
     train_args["run_name"] = run_name
-    train_args["output_dir"] = str(shared_root / cfg_name / "weak")
+    train_args["output_dir"] = str(root / weak_model_last_name / cfg_name / "weak")
     train_args["learning_rate"] = cfg.weak_lr
     weak_ds_dict = DatasetDict(
         {
@@ -90,7 +91,7 @@ def run_train(cfg: SFTConfig):
     )
 
     # load weak predictions
-    weak_preds_root = shared_root / cfg_name / "weak" / "predictions"
+    weak_preds_root = root / weak_model_last_name / cfg_name / "weak" / "predictions"
     print(f"Loading weak finetune predictions from {weak_preds_root}")
     weak_train_preds_ds = load_from_disk(str(weak_preds_root / "train"))
     weak_val_preds_ds = load_from_disk(str(weak_preds_root / "val"))
@@ -99,7 +100,7 @@ def run_train(cfg: SFTConfig):
     print("\n\033[32m===== Training w2s model =====\033[0m")
     model_cfg, run_name = get_model_and_run_name(cfg.strong_model_name, "w2s")
     train_args["run_name"] = run_name
-    train_args["output_dir"] = str(root / cfg_name / "w2s")
+    train_args["output_dir"] = str(root / f"{weak_model_last_name}___{strong_model_last_name}" / cfg_name / "w2s")
     train_args["learning_rate"] = cfg.strong_lr
     w2s_ds_dict = DatasetDict(
         {
@@ -127,7 +128,7 @@ def run_train(cfg: SFTConfig):
         transfer=True,
         predict_dict=w2s_predict_dict,
         save_activations=True,
-        acts_dir=shared_root / cfg_name / "w2s" / "activations",
+        acts_dir=root / f"{weak_model_last_name}___{strong_model_last_name}" / cfg_name / "w2s" / "activations",
     )
 
     # train weak floor without lora
@@ -136,7 +137,7 @@ def run_train(cfg: SFTConfig):
     cfg.disable_finetune = True
     model_cfg, run_name = get_model_and_run_name(cfg.weak_model_name, "weak_base")
     train_args["run_name"] = run_name
-    train_args["output_dir"] = str(shared_root / cfg_name / "weak_base")
+    train_args["output_dir"] = str(root / weak_model_last_name / cfg_name / "weak_base")
     train_args["learning_rate"] = cfg.strong_lr
     strong_ds_dict = DatasetDict(
         {
@@ -163,7 +164,7 @@ def run_train(cfg: SFTConfig):
     cfg.disable_finetune = True
     model_cfg, run_name = get_model_and_run_name(cfg.strong_model_name, "strong_base")
     train_args["run_name"] = run_name
-    train_args["output_dir"] = str(shared_root / cfg_name / "strong_base")
+    train_args["output_dir"] = str(root / strong_model_last_name / cfg_name / "strong_base")
     train_args["learning_rate"] = cfg.strong_lr
     strong_ds_dict = DatasetDict(
         {
@@ -188,7 +189,7 @@ def run_train(cfg: SFTConfig):
     print("\n\033[32m===== Training strong finetune model (ceil) =====\033[0m")
     model_cfg, run_name = get_model_and_run_name(cfg.strong_model_name, "strong_ft")
     train_args["run_name"] = run_name
-    train_args["output_dir"] = str(shared_root / cfg_name / "strong")
+    train_args["output_dir"] = str(root / strong_model_last_name / cfg_name / "strong")
     train_args["learning_rate"] = cfg.strong_lr
     strong_ds_dict = DatasetDict(
         {

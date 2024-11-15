@@ -4,8 +4,14 @@ import numpy as np
 from w2s.roc_auc import roc_auc
 import torch
 
+
 def get_logits(ds):
     return np.array([1-np.array(ds["soft_pred"]), np.array(ds["soft_pred"])]).T
+
+def get_brier(ds):
+    labels = np.array([d["labels"] for d in ds])
+    preds = np.array([d["soft_pred"] for d in ds])
+    return np.mean((labels - preds)**2)
 
 def get_jsd(ds1, ds2):
     return np.mean(jsd(get_logits(ds1), get_logits(ds2)))
@@ -28,6 +34,14 @@ def get_kappa_mcqs(m1, m2, n_options=4):
     cexp = p1 * p2 + expsamewrong
     kappa = (cobs - cexp) / (1 - cexp)
     return kappa
+
+def get_diffp(ds1, ds2):
+    #s1[pred] != s2['pred']
+    diffp = 0
+    for s1, s2 in zip(ds1, ds2):
+        if s1["pred"] != s2["pred"]:
+            diffp += 1
+    return diffp/len(ds1)
 
 def get_acc(ds):
     labels = np.array([d["labels"] for d in ds])

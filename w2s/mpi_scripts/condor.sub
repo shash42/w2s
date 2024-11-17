@@ -2,14 +2,14 @@ LOGS_DIR=/home/sgoel/w2s/logs/
 executable=/home/sgoel/w2s/w2s/mpi_scripts/run.sh
 
 # Optional args (will be passed to the executable)
-arguments = $(dataset) epochs_3 google/gemma-2-2b meta-llama/Llama-3.1-8B
+arguments = $(dataset) epochs_3 Qwen/Qwen2.5-0.5B bgoogle/gemma-2-9b
 # Logs
 error = $(LOGS_DIR)/err/job.$(Cluster).$(dataset).$(Process).err
 output = $(LOGS_DIR)/out/job.$(Cluster).$(dataset).$(Process).out
 log = $(LOGS_DIR)/log/job.$(Cluster).$(dataset).$(Process).log
 
 # Specs
-request_memory = 8192
+request_memory = 12288
 request_cpus = 1
 request_gpus = 1
 requirements = (TARGET.CUDADeviceName == "NVIDIA A100-SXM4-80GB")

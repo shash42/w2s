@@ -2,7 +2,7 @@ LOGS_DIR=/home/sgoel/w2s/logs/
 executable=/home/sgoel/w2s/w2s/mpi_scripts/run.sh
 
 # Optional args (will be passed to the executable)
-arguments = $(dataset) epochs_3 Qwen/Qwen2.5-0.5B bgoogle/gemma-2-9b
+arguments = $(dataset) epochs_3 Qwen/Qwen2.5-0.5B google/gemma-2-9b
 # Logs
 error = $(LOGS_DIR)/err/job.$(Cluster).$(dataset).$(Process).err
 output = $(LOGS_DIR)/out/job.$(Cluster).$(dataset).$(Process).out

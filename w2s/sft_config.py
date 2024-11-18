@@ -26,7 +26,7 @@ class SFTConfig(Serializable):
     minibatch_size: int = 1
     # examples per update (gradient accumulated across minibatches)
     batch_size: int = 32
-    results_folder: str = "./results"
+    results_folder: str = "/fast/sgoel/w2s/results"
     run_name: str = "default"
     shared_folder: str = "shared_new_3"
     disable_finetune: bool = False

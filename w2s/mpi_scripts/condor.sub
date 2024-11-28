@@ -2,7 +2,7 @@ LOGS_DIR=/home/sgoel/w2s/logs/
 executable=/home/sgoel/w2s/w2s/mpi_scripts/run.sh
 
 # Optional args (will be passed to the executable)
-arguments = $(dataset) epochs_3 Qwen/Qwen2.5-0.5B allenai/OLMo-2-1124-7B
+arguments = $(dataset) epochs_3 Qwen/Qwen2.5-0.5B meta-llama/Llama-3.1-8B
 # Logs
 error = $(LOGS_DIR)/err/job.$(Cluster).$(dataset).$(Process).err
 output = $(LOGS_DIR)/out/job.$(Cluster).$(dataset).$(Process).out
@@ -14,6 +14,7 @@ request_cpus = 2
 request_gpus = 1
 requirements = (TARGET.CUDADeviceName == "NVIDIA A100-SXM4-80GB")
 
-datasets = anli-r2 sciq cola ethics-utilitarianism piqa sst2 twitter-sentiment boolq dream mc_taco multirc quail quartz social_i_qa wic cosmos_qa 
+# datasets = anli-r2 sciq cola ethics-utilitarianism piqa sst2 twitter-sentiment boolq 
+datasets = dream mc_taco multirc quail quartz social_i_qa wic cosmos_qa 
 
 queue dataset in $(datasets)

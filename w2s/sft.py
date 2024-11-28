@@ -55,7 +55,7 @@ class CustomLossTrainer(Trainer):
             self.buffer_size = buffer_size
 
 
-    def compute_loss(self, model, inputs, return_outputs=False):
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         labels = inputs.pop("labels").float()
 
         outputs = model(**inputs)

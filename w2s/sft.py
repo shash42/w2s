@@ -32,6 +32,9 @@ from w2s.sft_utils import (
 from w2s.loss import LossConfig
 from w2s.probe import PROBES
 
+import os
+import json
+
 
 class CustomLossTrainer(Trainer):
     def __init__(

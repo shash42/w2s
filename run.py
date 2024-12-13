@@ -68,8 +68,8 @@ def run_train(cfg: SFTConfig):
     # train weak finetune, get predictions
     # print("\n\033[32m===== Training weak finetune model =====\033[0m")
     # model_cfg, run_name = get_model_and_run_name(cfg.weak_model_name, "weak_ft")
-    # weak_model_last_name = cfg.weak_model_name.split("/")[-1]
-    # strong_model_last_name = cfg.strong_model_name.split("/")[-1]
+    weak_model_last_name = cfg.weak_model_name.split("/")[-1]
+    strong_model_last_name = cfg.strong_model_name.split("/")[-1]
     # train_args["run_name"] = run_name
     # train_args["output_dir"] = str(root / weak_model_last_name / cfg_name / "weak")
     # train_args["learning_rate"] = cfg.weak_lr

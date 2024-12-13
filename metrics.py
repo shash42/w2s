@@ -54,28 +54,51 @@ def get_acc(ds):
     return np.mean(labels == (preds > 0.5))*100
 
 def compute_mean_preds(preds, dname, split):
-    preds[dname]["mean"] = {}
-    preds[dname]["mean"][split] = preds[dname]["weak_ft"][split]
-    preds[dname]["mean"][split] = preds[dname]["mean"][split].remove_columns(["soft_pred", "pred"])
-    avg_soft_preds = [(x + y)/2 for (x, y) in zip(preds[dname]["weak_ft"][split]["soft_pred"], preds[dname]["strong_base"][split]["soft_pred"])]
-    preds[dname]["mean"][split] = preds[dname]["mean"][split].add_column("soft_pred", avg_soft_preds)
-    avg_preds = [x > 0.5 for x in avg_soft_preds]
-    preds[dname]["mean"][split] = preds[dname]["mean"][split].add_column("pred", avg_preds)
+    weak_split = preds[dname]["weak_ft"][split]
+    strong_split = preds[dname]["strong_base"][split]
+
+    # Convert columns to numpy arrays for vectorized operations
+    weak_soft = np.array(weak_split["soft_pred"], dtype=np.float32)
+    strong_soft = np.array(strong_split["soft_pred"], dtype=np.float32)
+
+    # Vectorized average soft predictions
+    avg_soft_preds = (weak_soft + strong_soft) / 2.0
+    # Vectorized binary predictions
+    avg_preds = avg_soft_preds > 0.5
+
+    # Create mean_split dataset
+    mean_split = weak_split.remove_columns(["soft_pred", "pred"])
+    mean_split = mean_split.add_column("soft_pred", avg_soft_preds.tolist())
+    mean_split = mean_split.add_column("pred", avg_preds.tolist())
+
+    preds[dname]["mean"] = {split: mean_split}
     return preds[dname]["mean"]
-    
+
+
 def compute_diff_ceil(preds, dname, split):
-    preds[dname]["diff_ceil"] = {}
-    preds[dname]["diff_ceil"][split] = preds[dname]["weak_ft"][split]
-    oracle_preds = list(preds[dname]["weak_ft"][split]["pred"])
-    oracle_soft_preds = list(preds[dname]["weak_ft"][split]["soft_pred"])
-    for idx, x in enumerate(preds[dname]["strong_base"][split]["pred"]):
-        if x == preds[dname]["weak_ft"][split]["labels"][idx]:
-            oracle_preds[idx] = x
-            oracle_soft_preds[idx] = preds[dname]["strong_base"][split]["soft_pred"][idx]
-    
-    preds[dname]["diff_ceil"][split] = preds[dname]["diff_ceil"][split].remove_columns(["soft_pred", "pred"])
-    preds[dname]["diff_ceil"][split] = preds[dname]["diff_ceil"][split].add_column("soft_pred", oracle_soft_preds)
-    preds[dname]["diff_ceil"][split] = preds[dname]["diff_ceil"][split].add_column("pred", oracle_preds)
+    weak_split = preds[dname]["weak_ft"][split]
+    strong_split = preds[dname]["strong_base"][split]
+
+    # Convert columns to numpy arrays
+    weak_pred = np.array(weak_split["pred"], dtype=np.bool_)
+    weak_soft = np.array(weak_split["soft_pred"], dtype=np.float32)
+    strong_pred = np.array(strong_split["pred"], dtype=np.bool_)
+    strong_soft = np.array(strong_split["soft_pred"], dtype=np.float32)
+    labels = np.array(weak_split["labels"])
+
+    # Construct mask where strong predictions match the labels
+    mask = (strong_pred == labels)
+
+    # Vectorized selection of oracle predictions and soft predictions
+    oracle_preds = np.where(mask, strong_pred, weak_pred)
+    oracle_soft_preds = np.where(mask, strong_soft, weak_soft)
+
+    # Create diff_ceil_split dataset
+    diff_ceil_split = weak_split.remove_columns(["soft_pred", "pred"])
+    diff_ceil_split = diff_ceil_split.add_column("soft_pred", oracle_soft_preds.tolist())
+    diff_ceil_split = diff_ceil_split.add_column("pred", oracle_preds.tolist())
+
+    preds[dname]["diff_ceil"] = {split: diff_ceil_split}
     return preds[dname]["diff_ceil"]
 
 def populate_preds(preds, datasets, model_names, datasplits, folder_name, weak_model, strong_model, verbose=False):
@@ -114,41 +137,91 @@ def populate_preds(preds, datasets, model_names, datasplits, folder_name, weak_m
     return preds
 
 def precomputed_accs(preds, foldername, dname, mnames, split):
-    path = f"results/{foldername}/{dname}/{split}/accs.json"
-    #make path if doesnt exist
-    os.makedirs(f"results/{foldername}/{dname}/{split}", exist_ok=True)
-    accs = {}
-    if not os.path.exists(path):
-        for mname in mnames:
-            accs[mname] = get_acc(preds[dname][mname][split])
-        with open(path, "w") as f:
-            json.dump(accs, f)
-    else:
-        with open(path, "r") as f:
+    """
+    Computes or loads cached accuracies for all requested models `mnames` on a given dataset `dname` and `split`.
+
+    The results are stored in:
+       results/{foldername}/{dname}/{split}/accs.json
+
+    Format of accs.json:
+    {
+       "weak_ft": 0.85,
+       "strong_base": 0.90,
+       "w2s": 0.88,
+       ...
+    }
+
+    If a model's accuracy is not present, compute it, add it to the dict, and rewrite the file.
+    """
+    base_path = f"results/{foldername}/{dname}/{split}"
+    os.makedirs(base_path, exist_ok=True)
+    acc_path = os.path.join(base_path, "accs.json")
+
+    # Load existing accuracies if available
+    if os.path.exists(acc_path):
+        with open(acc_path, "r") as f:
             accs = json.load(f)
-        for mname in mnames:
-            if mname not in accs:
-                accs[mname] = get_acc(preds[dname][mname][split])
-        with open(path, "w") as f:
-            json.dump(accs, f)
+    else:
+        accs = {}
+
+    # Compute missing accuracies
+    updated = False
+    for mname in mnames:
+        if mname not in accs:
+            acc_val = get_acc(preds[dname][mname][split])
+            accs[mname] = acc_val
+            updated = True
+
+    # Save if updated
+    if updated:
+        with open(acc_path, "w") as f:
+            json.dump(accs, f, indent=2)
+
     return accs
 
-def precomputed_diffs(preds, foldername, dname, split, diff_func, diff_func_name):
-    path = f"results/{foldername}/{dname}/{split}/diffs.json"
-    diffs = {}
-    os.makedirs(f"results/{foldername}/{dname}/{split}", exist_ok=True)
-    if not os.path.exists(path):
-        diffs[diff_func_name] = diff_func(preds[dname]["weak_ft"][split], preds[dname]["strong_base"][split])
-        with open(path, "w") as f:
-            json.dump(diffs, f)
-    else:
-        with open(path, "r") as f:
+def precomputed_diffs(preds, foldername, dname, split, diff_func, diff_func_name, m1, m2):
+    """
+    Computes or loads cached differences for a given metric function and a pair of models (m1, m2).
+    Results are stored in:
+       results/{foldername}/{dname}/{split}/diffs.json
+
+    Format of diffs.json:
+    {
+       "JSD_weak_ft_strong_base": 0.05,
+       "Kappa_strong_base_w2s": 0.10,
+       ...
+    }
+
+    The key format is: f"{diff_func_name}_{m1}_{m2}"
+    If this key doesn't exist, compute, store, and return it.
+    If it does, just return the cached value.
+    """
+    base_path = f"results/{foldername}/{dname}/{split}"
+    os.makedirs(base_path, exist_ok=True)
+    diff_path = os.path.join(base_path, "diffs.json")
+
+    # Load existing diffs if available
+    if os.path.exists(diff_path):
+        with open(diff_path, "r") as f:
             diffs = json.load(f)
-        if diff_func_name not in diffs:
-            diffs[diff_func_name] = diff_func(preds[dname]["weak_ft"][split], preds[dname]["strong_base"][split])
-            with open(path, "w") as f:
-                json.dump(diffs, f) 
-    return diffs[diff_func_name]
+    else:
+        diffs = {}
+
+    diff_key = f"{diff_func_name}_{m1}_{m2}"
+    if diff_key not in diffs:
+        # Compute the difference metric for these two models
+        vals_m1 = preds[dname][m1][split]
+        vals_m2 = preds[dname][m2][split]
+        diff_val = diff_func(vals_m1, vals_m2)
+        diffs[diff_key] = diff_val
+
+        # Save updated diffs.json
+        with open(diff_path, "w") as f:
+            json.dump(diffs, f, indent=2)
+    else:
+        diff_val = diffs[diff_key]
+
+    return diff_val
 
 def get_auc(ds):
     labels = torch.from_numpy(np.array([d["labels"] for d in ds])).float()

@@ -1,6 +1,9 @@
 from pathlib import Path
 import os
-
+from filelock import SoftFileLock
+import filelock
+# Override FileLock globally to use SoftFileLock
+filelock.FileLock = SoftFileLock
 import torch
 from datasets import DatasetDict, load_from_disk
 from simple_parsing import parse
@@ -18,6 +21,8 @@ from w2s.utils import get_config_foldername
 
 def run_train(cfg: SFTConfig):
     print(f"Loading and processing dataset {cfg.dataset}")
+    from filelock import FileLock
+    print("Using FileLock:", FileLock)
     splits = load_and_process_dataset(
         cfg.dataset, cfg.n_train, cfg.n_val, cfg.n_test, cfg.n_predict
     )
@@ -283,8 +288,4 @@ def run_train(cfg: SFTConfig):
     #     prev = f"s2s-{s2s_iter}"
 
 if __name__ == "__main__":
-    from filelock import SoftFileLock
-    import filelock
-    # Override FileLock globally to use SoftFileLock
-    filelock.FileLock = SoftFileLock
     run_train(parse(SFTConfig))

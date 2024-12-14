@@ -51,53 +51,97 @@ def grouped_bar_plot_accs(accs, split='test', metric_name="Accuracy", savepath=N
         plt.savefig(savepath, bbox_inches='tight')
         print(f"Saved grouped bar plot to {savepath}")
 
-
-def conf_mat_accs(preds, datasets_list, mref1="weak_ft", mref2="strong_base", macc="w2s", split='test', savepath=None):
-    num_datasets = len(datasets_list)
-    plt.rcParams.update({'font.size': 14})
-    fig, axes = plt.subplots(1, num_datasets, figsize=(5 * num_datasets, 5))
+def plot_conf_mat_from_buckets(
+    buckets_dict, 
+    datasets_list,
+    mref1="weak_ft",
+    mref2="strong_base",
+    savepath=None
+):
+    """
+    Plots 2x2 confusion matrices from precomputed buckets_dict for each dataset.
     
-    for idx, (dset, ax) in enumerate(zip(datasets_list, axes)):
-        dsref1, dsref2, dsmain = preds[dset][mref1][split], preds[dset][mref2][split], preds[dset][macc][split]
-        
-        buckets = acc_buckets(dsref1, dsref2, dsmain)
-        
-        correct_cc, total_cc = buckets['cc']['correct'], buckets['cc']['total']
-        correct_cw, total_cw = buckets['cw']['correct'], buckets['cw']['total']
-        correct_wc, total_wc = buckets['wc']['correct'], buckets['wc']['total']
-        correct_ww, total_ww = buckets['ww']['correct'], buckets['ww']['total']
-        
+    buckets_dict[dset] should look like:
+        {
+          'cc': {'correct': ..., 'total': ...}, 
+          'cw': {'correct': ..., 'total': ...}, 
+          'wc': {'correct': ..., 'total': ...}, 
+          'ww': {'correct': ..., 'total': ...}
+        }
+    where 'cc' = both (mref1, mref2) say "Correct",
+          'cw' = (mref1="Correct", mref2="Wrong"),
+          'wc' = (mref1="Wrong",   mref2="Correct"),
+          'ww' = both are "Wrong".
+
+    We create a 2x2 matrix where:
+        Top-left  cell (row=cc, col=cc) = main model performance when both references are "Correct".
+        Top-right cell (row=cc, col=cw) = main model performance in the cc vs cw scenario, etc.
+    But to match your 'conf_mat_acc' style:
+      - Row 0 is (mref1=Correct), Row 1 is (mref1=Wrong).
+      - Col 0 is (mref2=Correct), Col 1 is (mref2=Wrong).
+
+    In each cell, we show normalized fraction and raw counts in red parentheses.
+    """
+    num_datasets = len(datasets_list)
+    fig, axes = plt.subplots(1, num_datasets, figsize=(5 * num_datasets, 5))
+    if num_datasets == 1:
+        axes = [axes]  # ensure iterable
+
+    for dset, ax in zip(datasets_list, axes):
+        # Extract confusion buckets for this dataset
+        b = buckets_dict[dset]
+        # For convenience:
+        correct_cc, total_cc = b['cc']['correct'], b['cc']['total']
+        correct_cw, total_cw = b['cw']['correct'], b['cw']['total']
+        correct_wc, total_wc = b['wc']['correct'], b['wc']['total']
+        correct_ww, total_ww = b['ww']['correct'], b['ww']['total']
+
+        # Build a 2x2 matrix of normalized values: how often the main model is "Correct" within each bucket
         cm = np.array([
-            [correct_cc / total_cc if total_cc > 0 else 0, correct_cw / total_cw if total_cw > 0 else 0],
-            [correct_wc / total_wc if total_wc > 0 else 0, correct_ww / total_ww if total_ww > 0 else 0]
+            [
+                correct_cc / total_cc if total_cc > 0 else 0.0, 
+                correct_cw / total_cw if total_cw > 0 else 0.0
+            ],
+            [
+                correct_wc / total_wc if total_wc > 0 else 0.0, 
+                correct_ww / total_ww if total_ww > 0 else 0.0
+            ]
         ])
-        
+
+        # Build the text annotations (raw counts in parentheses)
         cm_text = np.array([
-            [f"({total_cc})" if total_cc > 0 else "",
-             f"({total_cw})" if total_cw > 0 else ""],
-            [f"({total_wc})" if total_wc > 0 else "",
-             f"({total_ww})" if total_ww > 0 else ""]
+            [
+                f"({total_cc})" if total_cc > 0 else "(0)",
+                f"({total_cw})" if total_cw > 0 else "(0)"
+            ],
+            [
+                f"({total_wc})" if total_wc > 0 else "(0)",
+                f"({total_ww})" if total_ww > 0 else "(0)"
+            ]
         ])
-        
+
+        # Use sklearn's ConfusionMatrixDisplay for neat plotting
         disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["Correct", "Wrong"])
-        disp.plot(ax=ax, cmap="Blues", colorbar=False)
-        
+        disp.plot(ax=ax, cmap="Blues", colorbar=False, values_format=".2f")  # or values_format=".2f" for 2 decimal places
+
+        # Insert raw count offsets in red
         for i in range(cm.shape[0]):
             for j in range(cm.shape[1]):
-                ax.text(j, i + 0.2, cm_text[i, j], ha="center", va="center", color="red")
-        
-        ax.set_title(dset)
+                ax.text(j, i + 0.25, cm_text[i, j],
+                        ha="center", va="center", color="red", fontsize=12)
+
+        ax.set_title(dset, fontsize=14)
         ax.set_xlabel(f"{mref2} Prediction", fontsize=14)
         ax.set_ylabel(f"{mref1} Prediction", fontsize=14)
-        plt.rcParams.update({'axes.labelsize': 14})
-        plt.tick_params(axis='both', which='major', labelsize=14)
+        ax.tick_params(axis='both', which='major', labelsize=12)
 
     plt.tight_layout()
-    if savepath is None:
-        plt.show()
-    else:
+    if savepath:
         plt.savefig(savepath, bbox_inches='tight')
-        print(f"Saved confusion matrix plot to {savepath}")
+        plt.close()
+        print(f"Saved confusion matrices to {savepath}")
+    else:
+        plt.show()
 
 
 def plot_diff_metric_from_values(metrics_per_pair, datasets_list, metric_name, savepath=None):
@@ -266,6 +310,95 @@ def plot_diff_matrices_subplots(diff_matrices, model_names, metric_name, savepat
 # Helper Functions Using Precomputed Values
 #########################################
 
+
+def compute_confusion_buckets_for_single_pair(preds, datasets_list, mref1, mref2, macc, split):
+    """
+    Computes confusion buckets for a single (mref1, mref2, macc) triple in 'preds'.
+
+    Args:
+        preds (dict): A single dictionary containing predictions, structured as:
+            preds[dataset][model][split] = list of dicts, each dict has {"labels", "pred"}.
+        datasets_list (list): List of dataset names.
+        mref1 (str): Key for the first reference model.
+        mref2 (str): Key for the second reference model.
+        macc (str): Key for the main model.
+        split (str): Data split to use (e.g. "test").
+
+    Returns:
+        dict: A dictionary keyed by dataset, each value is the 2x2 confusion buckets structure.
+    """
+    buckets_dict = {}
+    for dset in datasets_list:
+        dsref1 = preds[dset][mref1][split]  # list of {"labels", "pred"}
+        dsref2 = preds[dset][mref2][split]
+        dsmain = preds[dset][macc][split]
+
+        # Compute confusion buckets using your acc_buckets function
+        buckets_dict[dset] = acc_buckets(dsref1, dsref2, dsmain)
+
+    return buckets_dict
+
+
+def compute_confusion_buckets_for_average(preds_dict, datasets_list, mref1, mref2, macc, split, skip_list=None):
+    """
+    Aggregates confusion buckets across multiple (weak_model, strong_model) pairs.
+
+    Args:
+        preds_dict (dict): Dictionary keyed by (weak_model, strong_model), 
+                           each storing a 'preds' structure:
+                           preds_dict[(weak_model, strong_model)][dataset][model][split].
+        datasets_list (list): List of dataset names.
+        mref1 (str): Key for the first reference model (e.g., "weak_ft").
+        mref2 (str): Key for the second reference model (e.g., "strong_base").
+        macc (str): Key for the main model (e.g., "w2s").
+        split (str): Data split to use (e.g. "test").
+        skip_list (list): List of (weak_model, strong_model) pairs to exclude.
+
+    Returns:
+        dict: A dictionary keyed by dataset with aggregated confusion buckets.
+    """
+    if skip_list is None:
+        skip_list = []
+
+    # Initialize aggregated buckets (raw counts, not normalized)
+    agg_buckets_dict = {
+        dset: {
+            'cc': {'correct': 0, 'total': 0},
+            'cw': {'correct': 0, 'total': 0},
+            'wc': {'correct': 0, 'total': 0},
+            'ww': {'correct': 0, 'total': 0}
+        }
+        for dset in datasets_list
+    }
+
+    count_valid_pairs = 0
+
+    # Iterate over all (weak_model, strong_model) pairs
+    for (weak_model, strong_model), single_preds in preds_dict.items():
+        if (weak_model, strong_model) in skip_list:
+            continue
+
+        for dset in datasets_list:
+            dsref1 = single_preds[dset][mref1][split]  # list of {"labels", "pred"}
+            dsref2 = single_preds[dset][mref2][split]
+            dsmain = single_preds[dset][macc][split]
+
+            # Compute confusion buckets for this pair/dataset
+            buckets_pair = acc_buckets(dsref1, dsref2, dsmain)
+
+            # Accumulate the raw counts in the aggregate
+            for bucket_type, bucket_vals in buckets_pair.items():
+                agg_buckets_dict[dset][bucket_type]['correct'] += bucket_vals['correct']
+                agg_buckets_dict[dset][bucket_type]['total']   += bucket_vals['total']
+
+        count_valid_pairs += 1
+
+    if count_valid_pairs == 0:
+        print("Warning: No valid model pairs found after applying skip_list.")
+
+    return agg_buckets_dict
+
+
 def compute_diff_matrix_for_dataset_single_pair(preds, folder_path, dataset, model_names, split, diff_func, diff_func_name):
     """
     Compute the N x N difference matrix for a single dataset and single (weak_model, strong_model) scenario.
@@ -413,6 +546,25 @@ if __name__ == "__main__":
         avg_acc = compute_average_accuracies(preds_dict, folder_name, datasets, model_names, skip_list, split=split)
         grouped_bar_plot_accs(avg_acc, split=split, metric_name="Accuracy", savepath=f"results/{folder_name}/averaged_grouped_bar_plot_accs_{split}.png", datasets_list=datasets)
 
+        averaged_buckets = compute_confusion_buckets_for_average(
+            preds_dict,
+            datasets,
+            mref1="weak_ft",
+            mref2="strong_base",
+            macc="w2s",
+            split=split,
+            skip_list=skip_list
+        )
+
+        # Plot averaged confusion matrices
+        plot_conf_mat_from_buckets(
+            averaged_buckets,
+            datasets,
+            mref1="weak_ft",
+            mref2="strong_base",
+            savepath=f"results/{folder_name}/averaged_conf_mat_accs_{split}.png"
+        )
+
         # JSD
         avg_jsd_pairs = compute_average_metric_pairs(preds_dict, folder_name, datasets, get_jsd, "JSD", skip_list, split=split)
         plot_diff_metric_from_values(avg_jsd_pairs, datasets, "JSD", savepath=f"results/{folder_name}/averaged_jsd_{split}.png")
@@ -462,7 +614,25 @@ if __name__ == "__main__":
                         accs[m].append(acc_dict[m])
 
                 grouped_bar_plot_accs(accs, split=split, metric_name="acc", savepath=f"{savepath}/grouped_bar_plot_accs_{split}.png", datasets_list=datasets)
-                conf_mat_accs(preds, split=split, savepath=f"{savepath}/conf_mat_accs_{split}.png", datasets_list=datasets)
+                # conf_mat_accs(preds, split=split, savepath=f"{savepath}/conf_mat_accs_{split}.png", datasets_list=datasets)
+
+                single_buckets = compute_confusion_buckets_for_single_pair(
+                    preds,
+                    datasets,
+                    mref1="weak_ft",
+                    mref2="strong_base",
+                    macc="w2s",
+                    split=split
+                )
+
+                # Plot confusion matrices for this pair
+                plot_conf_mat_from_buckets(
+                    single_buckets,
+                    datasets,
+                    mref1="weak_ft",
+                    mref2="strong_base",
+                    savepath=f"{savepath}/conf_mat_accs_{split}.png"
+                )
 
                 def plot_single_pair_diff_metric_from_precomputed(diff_func, diff_func_name, metric_name, savepath):
                     pair_metrics = {"w-s":[], "s-w2s":[], "w-w2s":[]}

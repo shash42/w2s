@@ -7,6 +7,7 @@ from w2s.roc_auc import roc_auc
 import torch
 import json
 import pyarrow as pa
+import pandas as pd
 
 
 
@@ -234,28 +235,49 @@ def add_preds(ds):
     return ds
 
 def acc_buckets(dsref1, dsref2, dsmain):
-    buckets = {"cc" : {"correct": 0, "total": 0}, "cw": {"correct": 0, "total": 0}, "wc": {"correct": 0, "total": 0}, "ww": {"correct": 0, "total": 0}}
-    for d1, d2, dsm in zip(dsref1, dsref2, dsmain):
-        if d1["labels"] == d1["pred"]:
-            if d2["labels"] == d2["pred"]: # cc
-                buckets["cc"]["total"] += 1
-                if dsm["labels"] == dsm["pred"]:
-                    buckets["cc"]["correct"] += 1
-            else: # cw
-                buckets["cw"]["total"] += 1
-                if dsm["labels"] == dsm["pred"]:
-                    buckets["cw"]["correct"] += 1
-
-        else:
-            if d2["labels"] == d2["pred"]: # wc
-                buckets["wc"]["total"] += 1
-                if dsm["labels"] == dsm["pred"]:
-                    buckets["wc"]["correct"] += 1
-            else:
-                buckets["ww"]["total"] += 1
-                if dsm["labels"] == dsm["pred"]:
-                    buckets["ww"]["correct"] += 1
+    # Convert lists of dictionaries to Pandas DataFrames
+    df1 = pd.DataFrame(dsref1)
+    df2 = pd.DataFrame(dsref2)
+    df_main = pd.DataFrame(dsmain)
     
+    # Compute correctness for each dataset
+    df1['correct'] = df1['labels'] == df1['pred']
+    df2['correct'] = df2['labels'] == df2['pred']
+    df_main['correct'] = df_main['labels'] == df_main['pred']
+    
+    # Assign bucket labels based on correctness of df1 and df2
+    # 'c' for correct, 'w' for wrong
+    bucket_labels = (
+        df1['correct'].map({True: 'c', False: 'w'}) +
+        df2['correct'].map({True: 'c', False: 'w'})
+    )
+    
+    # Add bucket labels to the main DataFrame
+    df_main['bucket'] = bucket_labels
+    
+    # Initialize buckets
+    buckets = {
+        "cc": {"correct": 0, "total": 0},
+        "cw": {"correct": 0, "total": 0},
+        "wc": {"correct": 0, "total": 0},
+        "ww": {"correct": 0, "total": 0}
+    }
+    
+    # Group by bucket and calculate total and correct counts
+    grouped = df_main.groupby('bucket')['correct']
+    
+    # Update buckets with aggregated counts
+    for bucket in ['cc', 'cw', 'wc', 'ww']:
+        if bucket in grouped.groups:
+            total = grouped.size()[bucket]
+            correct = grouped.sum()[bucket]
+            buckets[bucket]['total'] = total
+            buckets[bucket]['correct'] = correct
+        else:
+            # If a bucket has no entries, it remains zero
+            pass
+    
+    # Print the final bucket counts
     print(buckets)
     return buckets
 

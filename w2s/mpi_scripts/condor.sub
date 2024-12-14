@@ -9,12 +9,12 @@ output = $(LOGS_DIR)/out/job.$(Cluster).$(dataset).$(Process).out
 log = $(LOGS_DIR)/log/job.$(Cluster).$(dataset).$(Process).log
 
 # Specs
-request_memory = 12288
+request_memory = 8192
 request_cpus = 2
 request_gpus = 1
 requirements = (TARGET.CUDADeviceName == "NVIDIA A100-SXM4-80GB")
 
-# datasets = anli-r2 sciq cola ethics-utilitarianism piqa sst2 twitter-sentiment boolq 
-datasets = dream mc_taco multirc quail quartz social_i_qa wic cosmos_qa 
+datasets = anli-r2 sciq cola ethics-utilitarianism piqa sst2 twitter-sentiment boolq 
+# datasets = dream mc_taco multirc quail quartz social_i_qa wic cosmos_qa 
 
 queue dataset in $(datasets)

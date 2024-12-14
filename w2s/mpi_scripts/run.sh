@@ -1,6 +1,7 @@
 source ~/miniforge3/etc/profile.d/conda.sh # equivalent to conda init
 conda activate diff
 export HOME=/home/sgoel
+export SOFT_FILELOCK=1
 # optionally parse args
 dataset="$1"
 run_name="$2"

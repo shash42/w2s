@@ -283,4 +283,8 @@ def run_train(cfg: SFTConfig):
     #     prev = f"s2s-{s2s_iter}"
 
 if __name__ == "__main__":
+    from filelock import SoftFileLock
+    import filelock
+    # Override FileLock globally to use SoftFileLock
+    filelock.FileLock = SoftFileLock
     run_train(parse(SFTConfig))

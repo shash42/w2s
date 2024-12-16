@@ -51,36 +51,24 @@ def grouped_bar_plot_accs(accs, split='test', metric_name="Accuracy", savepath=N
         plt.savefig(savepath, bbox_inches='tight')
         print(f"Saved grouped bar plot to {savepath}")
 
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.metrics import ConfusionMatrixDisplay
+from statsmodels.stats.proportion import proportion_confint  # Import for confidence intervals
+
 def plot_conf_mat_from_buckets(
     buckets_dict, 
     datasets_list,
     mref1="weak_ft",
     mref2="strong_base",
-    savepath=None
+    macc="w2s",
+    savepath=None,
+    confidence_level=0.95  # You can adjust the confidence level if needed
 ):
     """
-    Plots 2x2 confusion matrices from precomputed buckets_dict for each dataset.
-    
-    buckets_dict[dset] should look like:
-        {
-          'cc': {'correct': ..., 'total': ...}, 
-          'cw': {'correct': ..., 'total': ...}, 
-          'wc': {'correct': ..., 'total': ...}, 
-          'ww': {'correct': ..., 'total': ...}
-        }
-    where 'cc' = both (mref1, mref2) say "Correct",
-          'cw' = (mref1="Correct", mref2="Wrong"),
-          'wc' = (mref1="Wrong",   mref2="Correct"),
-          'ww' = both are "Wrong".
-
-    We create a 2x2 matrix where:
-        Top-left  cell (row=cc, col=cc) = main model performance when both references are "Correct".
-        Top-right cell (row=cc, col=cw) = main model performance in the cc vs cw scenario, etc.
-    But to match your 'conf_mat_acc' style:
-      - Row 0 is (mref1=Correct), Row 1 is (mref1=Wrong).
-      - Col 0 is (mref2=Correct), Col 1 is (mref2=Wrong).
-
-    In each cell, we show normalized fraction and raw counts in red parentheses.
+    Plots 2x2 confusion matrices from precomputed buckets_dict for each dataset,
+    including confidence intervals for the accuracies.
     """
     num_datasets = len(datasets_list)
     fig, axes = plt.subplots(1, num_datasets, figsize=(5 * num_datasets, 5))
@@ -96,6 +84,13 @@ def plot_conf_mat_from_buckets(
         correct_wc, total_wc = b['wc']['correct'], b['wc']['total']
         correct_ww, total_ww = b['ww']['correct'], b['ww']['total']
 
+        total = b['cc']['total'] + b['cw']['total'] + b['wc']['total'] + b['ww']['total']
+        # Calculate confidence intervals for each cell
+        ci_cc = proportion_confint(correct_cc, total_cc, alpha=1 - confidence_level, method='wilson') if total_cc > 0 else (0, 0)
+        ci_cw = proportion_confint(correct_cw, total_cw, alpha=1 - confidence_level, method='wilson') if total_cw > 0 else (0, 0)
+        ci_wc = proportion_confint(correct_wc, total_wc, alpha=1 - confidence_level, method='wilson') if total_wc > 0 else (0, 0)
+        ci_ww = proportion_confint(correct_ww, total_ww, alpha=1 - confidence_level, method='wilson') if total_ww > 0 else (0, 0)
+
         # Build a 2x2 matrix of normalized values: how often the main model is "Correct" within each bucket
         cm = np.array([
             [
@@ -108,29 +103,40 @@ def plot_conf_mat_from_buckets(
             ]
         ])
 
-        # Build the text annotations (raw counts in parentheses)
+        # Build the text annotations (accuracy ± CI)
         cm_text = np.array([
             [
-                f"({total_cc})" if total_cc > 0 else "(0)",
-                f"({total_cw})" if total_cw > 0 else "(0)"
+                f"\n\n +-{(ci_cc[1] - ci_cc[0])/2:.2f} (n:{total_cc / total * 100:.2f}%)" if total_cc > 0 else "0.00\n(0, 0)",
+                f"\n\n +-{(ci_cw[1] - ci_cw[0])/2:.2f} (n:{total_cw / total * 100:.2f}%)" if total_cw > 0 else "0.00\n(0, 0)"
             ],
             [
-                f"({total_wc})" if total_wc > 0 else "(0)",
-                f"({total_ww})" if total_ww > 0 else "(0)"
+                f"\n\n +-{(ci_wc[1] - ci_wc[0])/2:.2f} (n:{total_wc / total * 100:.2f}%)" if total_wc > 0 else "0.00\n(0, 0)",
+                f"\n\n +-{(ci_ww[1] - ci_ww[0])/2:.2f} (n:{total_ww / total * 100:.2f}%)" if total_ww > 0 else "0.00\n(0, 0)"
             ]
         ])
 
         # Use sklearn's ConfusionMatrixDisplay for neat plotting
         disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["Correct", "Wrong"])
-        disp.plot(ax=ax, cmap="Blues", colorbar=False, values_format=".2f")  # or values_format=".2f" for 2 decimal places
+        disp.plot(ax=ax, cmap="Blues", colorbar=False, values_format=".2f", )  # or values_format=".2f" for 2 decimal places
+        for text in disp.text_.ravel():  # Adjust the annotations inside the matrix
+            text.set_fontsize(14)       # Adjust this value as needed
 
-        # Insert raw count offsets in red
+        # Insert confidence interval annotations
         for i in range(cm.shape[0]):
             for j in range(cm.shape[1]):
-                ax.text(j, i + 0.25, cm_text[i, j],
-                        ha="center", va="center", color="red", fontsize=12)
+                ax.text(j, i, cm_text[i, j],
+                        ha="center", va="center", fontsize=12, color="orange")
 
-        ax.set_title(dset, fontsize=14)
+        # Calculate overall accuracy and its confidence interval for the title
+        total_correct = b['cc']['correct'] + b['cw']['correct'] + b['wc']['correct'] + b['ww']['correct']
+        overall_acc = total_correct / total if total > 0 else 0.0
+        ci_overall = proportion_confint(total_correct, total, alpha=1 - confidence_level, method='wilson') if total > 0 else (0, 0)
+
+        ax.set_title(
+            f"{dset}\nTotal: {total}\n{macc} Acc: {overall_acc * 100:.1f}% "
+            f"({ci_overall[0] * 100:.1f}%, {ci_overall[1] * 100:.1f}%)",
+            fontsize=14
+        )
         ax.set_xlabel(f"{mref2} Prediction", fontsize=14)
         ax.set_ylabel(f"{mref1} Prediction", fontsize=14)
         ax.tick_params(axis='both', which='major', labelsize=12)
@@ -278,6 +284,9 @@ def plot_diff_matrices_subplots(diff_matrices, model_names, metric_name, savepat
     fig, axes = plt.subplots(1, num_datasets, figsize=(5 * num_datasets, 5))
     if num_datasets == 1:
         axes = [axes]
+    
+    def format_no_leading_zero(val):
+        return f"{val:.2f}".lstrip('0') if val < 1 else f"{val:.2f}"
 
     for ax, dset in zip(axes, datasets_list):
         diff_matrix = diff_matrices[dset]
@@ -287,8 +296,8 @@ def plot_diff_matrices_subplots(diff_matrices, model_names, metric_name, savepat
             xticklabels=model_names,
             yticklabels=model_names,
             cmap="YlOrRd",
-            annot=True,
-            fmt=".2f",
+            annot=np.array([[format_no_leading_zero(val) for val in row] for row in diff_matrix]),
+            fmt="",
             square=True,
             cbar=False,
             ax=ax
@@ -509,14 +518,17 @@ def compute_average_jsd_triangles(preds_dict, folder_name, datasets, skip_list, 
     return sums
 
 
-def get_preds_all_modelpairs(folder_name, model_names, datasplits=["test"]):
+def get_preds_all_modelpairs(folder_name, model_names, datasplits=["test"], datasets=None, skip_list=[]):
     preds_dict = {}
     for dir in os.listdir(f"results/{folder_name}"):
         dir_path = f"results/{folder_name}/{dir}"
         if os.path.isdir(dir_path) and "___" in dir:
             weak_model, strong_model = dir.split("___")
-            datasets = os.listdir(dir_path)
-            datasets = [d for d in datasets if d != "plots"]
+            if (weak_model, strong_model) in skip_list:
+                continue
+            if datasets is None:
+                datasets = os.listdir(dir_path)
+                datasets = [d for d in datasets if d != "plots"]
             preds = {}
             preds = populate_preds(preds, datasets, model_names, datasplits, folder_name, weak_model, strong_model)
             preds_dict[(weak_model, strong_model)] = preds
@@ -531,17 +543,20 @@ if __name__ == "__main__":
     mode = sys.argv[1] if len(sys.argv) > 1 else "all"  # default "all"
     
     folder_name = "epochs_3"
-    model_names = ["weak_ft", "strong_base", "mean", "w2s", "strong_ft", "diff_ceil"]
+    model_names = ["weak_ft", "strong_base", "strong_base2", "mean", "w2s", "strong_ft", "diff_ceil"]
+    m1_name, m2_name, m3_name = "weak_ft", "strong_base2", "w2s"
+    mtriplet_name = "strbase_on_w2ft_train"
     # If you only want a subset, uncomment below:
     # model_names = ["weak_ft", "strong_base", "w2s", "strong_ft"]
-    datasplits = ["test"]
-    datasets = ["anli-r2", "boolq", "cola", "ethics-utilitarianism", "sciq", "piqa", "sst2", "twitter-sentiment"]
-    skip_list = [("gemma-2-9b", "Llama-3.1-8B"), ("Llama-3.1-8B", "gemma-2-9b"), ("Llama-3.1-8B", "Llama-3.1-8B"), ("Qwen2.5-0.5B", "OLMo-2-1124-7B")]
+    datasplits = ["train"]
+    datasets = ["anli-r2", "boolq", "cola", "ethics-utilitarianism", "sciq", "sst2", "twitter-sentiment"]
+    skip_list = [("gemma-2-9b", "Llama-3.1-8B"), ("Llama-3.1-8B", "gemma-2-9b"), ("Llama-3.1-8B", "Llama-3.1-8B"), ("Qwen2.5-0.5B", "OLMo-2-1124-7B"), ("Qwen2.5-0.5B", "Qwen2.5-14B"), ("Qwen2.5-0.5B", "gemma-2-27b"), ("Qwen2.5-0.5B", "granite-3.0-8b-base"), ("gemma-2-2b", "OLMo-2-1124-7B")]
 
-    preds_dict = get_preds_all_modelpairs(folder_name, model_names, datasplits=datasplits)
-    split = "test"
+    preds_dict = get_preds_all_modelpairs(folder_name, model_names, datasplits=datasplits, datasets=datasets, skip_list=skip_list)
+    split = "train"
 
     if mode == "average":
+        os.makedirs(f"results/{folder_name}/plots/{mtriplet_name}", exist_ok=True)
         # Compute averages across model pairs using precomputed values
         avg_acc = compute_average_accuracies(preds_dict, folder_name, datasets, model_names, skip_list, split=split)
         grouped_bar_plot_accs(avg_acc, split=split, metric_name="Accuracy", savepath=f"results/{folder_name}/averaged_grouped_bar_plot_accs_{split}.png", datasets_list=datasets)
@@ -549,9 +564,9 @@ if __name__ == "__main__":
         averaged_buckets = compute_confusion_buckets_for_average(
             preds_dict,
             datasets,
-            mref1="weak_ft",
-            mref2="strong_base",
-            macc="w2s",
+            mref1=m1_name,
+            mref2=m2_name,
+            macc=m3_name,
             split=split,
             skip_list=skip_list
         )
@@ -560,26 +575,27 @@ if __name__ == "__main__":
         plot_conf_mat_from_buckets(
             averaged_buckets,
             datasets,
-            mref1="weak_ft",
-            mref2="strong_base",
-            savepath=f"results/{folder_name}/averaged_conf_mat_accs_{split}.png"
+            mref1=m1_name,
+            mref2=m2_name,
+            macc=m3_name,
+            savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_conf_mat_accs_{split}.png"
         )
 
         # JSD
-        avg_jsd_pairs = compute_average_metric_pairs(preds_dict, folder_name, datasets, get_jsd, "JSD", skip_list, split=split)
-        plot_diff_metric_from_values(avg_jsd_pairs, datasets, "JSD", savepath=f"results/{folder_name}/averaged_jsd_{split}.png")
+        avg_jsd_pairs = compute_average_metric_pairs(preds_dict, folder_name, datasets, get_jsd, "JSD", skip_list, split=split, m1=m1_name, m2=m2_name, m3=m3_name)
+        plot_diff_metric_from_values(avg_jsd_pairs, datasets, "JSD", savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_jsd_{split}.png")
 
         # Kappa
-        avg_kappa_pairs = compute_average_metric_pairs(preds_dict, folder_name, datasets, get_kappa_mcqs, "Kappa", skip_list, split=split)
-        plot_diff_metric_from_values(avg_kappa_pairs, datasets, "Kappa", savepath=f"results/{folder_name}/averaged_kappa_{split}.png")
+        avg_kappa_pairs = compute_average_metric_pairs(preds_dict, folder_name, datasets, get_kappa_mcqs, "Kappa", skip_list, split=split, m1=m1_name, m2=m2_name, m3=m3_name)
+        plot_diff_metric_from_values(avg_kappa_pairs, datasets, "Kappa", savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_kappa_{split}.png")
 
         # Prediction Diff%
-        avg_diffp_pairs = compute_average_metric_pairs(preds_dict, folder_name, datasets, get_diffp, "Prediction Diff%", skip_list, split=split)
-        plot_diff_metric_from_values(avg_diffp_pairs, datasets, "Prediction Diff%", savepath=f"results/{folder_name}/averaged_diffp_{split}.png")
+        avg_diffp_pairs = compute_average_metric_pairs(preds_dict, folder_name, datasets, get_diffp, "Prediction Diff%", skip_list, split=split, m1=m1_name, m2=m2_name, m3=m3_name)
+        plot_diff_metric_from_values(avg_diffp_pairs, datasets, "Prediction Diff%", savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_diffp_{split}.png")
 
         # JSD Triangles
-        avg_jsd_triangles = compute_average_jsd_triangles(preds_dict, folder_name, datasets, skip_list, split=split)
-        plot_multiple_triangles_from_values(avg_jsd_triangles, datasets, padding=0.3, savepath=f"results/{folder_name}/averaged_jsdtriangles_{split}.png")
+        avg_jsd_triangles = compute_average_jsd_triangles(preds_dict, folder_name, datasets, skip_list, split=split, m1=m1_name, m2=m2_name, m3=m3_name)
+        plot_multiple_triangles_from_values(avg_jsd_triangles, datasets, padding=0.3, savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_jsdtriangles_{split}.png", m1name=m1_name, m2name=m2_name, m3name=m3_name)
 
         for diff_func, diff_func_name in [(get_jsd, "JSD"), (get_kappa_mcqs, "Kappa"), (get_diffp, "Prediction Diff%")]:
             diff_matrices = {}
@@ -589,7 +605,7 @@ if __name__ == "__main__":
                     diff_matrices[d] = mat
             
             if diff_matrices:
-                heatmap_savepath = f"results/{folder_name}/diffmatrix_averaged_{diff_func_name.lower().replace(' ','_')}_{split}.png"
+                heatmap_savepath = f"results/{folder_name}/plots/{mtriplet_name}/diffmatrix_averaged_{diff_func_name.lower().replace(' ','_')}_{split}.png"
                 plot_diff_matrices_subplots(diff_matrices, model_names, diff_func_name, savepath=heatmap_savepath)
             else:
                 print(f"No data to plot for {diff_func_name} in average mode.")
@@ -600,7 +616,7 @@ if __name__ == "__main__":
             if (weak_model, strong_model) in skip_list:
                 continue
             pair_folder = f"{folder_name}/{weak_model}___{strong_model}"
-            savepath = f"results/{pair_folder}/plots"
+            savepath = f"results/{pair_folder}/plots/{mtriplet_name}"
             os.makedirs(savepath, exist_ok=True)
 
             for split in datasplits:
@@ -619,9 +635,9 @@ if __name__ == "__main__":
                 single_buckets = compute_confusion_buckets_for_single_pair(
                     preds,
                     datasets,
-                    mref1="weak_ft",
-                    mref2="strong_base",
-                    macc="w2s",
+                    mref1=m1_name,
+                    mref2=m2_name,
+                    macc=m3_name,
                     split=split
                 )
 
@@ -629,38 +645,39 @@ if __name__ == "__main__":
                 plot_conf_mat_from_buckets(
                     single_buckets,
                     datasets,
-                    mref1="weak_ft",
-                    mref2="strong_base",
+                    mref1=m1_name,
+                    mref2=m2_name,
+                    macc=m3_name,
                     savepath=f"{savepath}/conf_mat_accs_{split}.png"
                 )
 
-                def plot_single_pair_diff_metric_from_precomputed(diff_func, diff_func_name, metric_name, savepath):
-                    pair_metrics = {"w-s":[], "s-w2s":[], "w-w2s":[]}
+                def plot_single_pair_diff_metric_from_precomputed(diff_func, diff_func_name, metric_name, savepath, m1_name="weak_ft", m2_name="strong_base", m3_name="w2s"):
+                    pair_metrics = {f"{m1_name}-{m2_name}":[], f"{m2_name}-{m3_name}":[], f"{m1_name}-{m3_name}":[]}
                     for d in datasets:
-                        val_w_s = precomputed_diffs(preds, pair_folder, d, split, diff_func, diff_func_name, "weak_ft", "strong_base")
-                        val_s_w2s = precomputed_diffs(preds, pair_folder, d, split, diff_func, diff_func_name, "strong_base", "w2s")
-                        val_w_w2s = precomputed_diffs(preds, pair_folder, d, split, diff_func, diff_func_name, "weak_ft", "w2s")
-                        pair_metrics["w-s"].append(val_w_s)
-                        pair_metrics["s-w2s"].append(val_s_w2s)
-                        pair_metrics["w-w2s"].append(val_w_w2s)
+                        val_w_s = precomputed_diffs(preds, pair_folder, d, split, diff_func, diff_func_name, m1_name, m2_name)
+                        val_s_w2s = precomputed_diffs(preds, pair_folder, d, split, diff_func, diff_func_name, m2_name, m3_name)
+                        val_w_w2s = precomputed_diffs(preds, pair_folder, d, split, diff_func, diff_func_name, m1_name, m3_name)
+                        pair_metrics[f"{m1_name}-{m2_name}"].append(val_w_s)
+                        pair_metrics[f"{m2_name}-{m3_name}"].append(val_s_w2s)
+                        pair_metrics[f"{m1_name}-{m3_name}"].append(val_w_w2s)
                     plot_diff_metric_from_values(pair_metrics, datasets, metric_name, savepath=savepath)
 
                 # JSD
-                plot_single_pair_diff_metric_from_precomputed(get_jsd, "JSD", "JSD", f"{savepath}/jsd_{split}.png")
+                plot_single_pair_diff_metric_from_precomputed(get_jsd, "JSD", "JSD", f"{savepath}/jsd_{split}.png", m1_name=m1_name, m2_name=m2_name, m3_name=m3_name)
                 # Kappa
-                plot_single_pair_diff_metric_from_precomputed(get_kappa_mcqs, "Kappa", "Kappa", f"{savepath}/kappa_{split}.png")
+                plot_single_pair_diff_metric_from_precomputed(get_kappa_mcqs, "Kappa", "Kappa", f"{savepath}/kappa_{split}.png", m1_name=m1_name, m2_name=m2_name, m3_name=m3_name)
                 # Prediction Diff%
-                plot_single_pair_diff_metric_from_precomputed(get_diffp, "Prediction Diff%", "Prediction Diff%", f"{savepath}/diffp_{split}.png")
+                plot_single_pair_diff_metric_from_precomputed(get_diffp, "Prediction Diff%", "Prediction Diff%", f"{savepath}/diffp_{split}.png", m1_name=m1_name, m2_name=m2_name, m3_name=m3_name)
 
                 # Triangles for single pair using precomputed diffs for JSD
                 jsd_values = {}
                 for d in datasets:
-                    jsd_w_s = precomputed_diffs(preds, pair_folder, d, split, get_jsd, "JSD", "weak_ft", "strong_base")
-                    jsd_s_w2s = precomputed_diffs(preds, pair_folder, d, split, get_jsd, "JSD", "strong_base", "w2s")
-                    jsd_w_w2s = precomputed_diffs(preds, pair_folder, d, split, get_jsd, "JSD", "weak_ft", "w2s")
+                    jsd_w_s = precomputed_diffs(preds, pair_folder, d, split, get_jsd, "JSD", m1_name, m2_name)
+                    jsd_s_w2s = precomputed_diffs(preds, pair_folder, d, split, get_jsd, "JSD", m2_name, m3_name)
+                    jsd_w_w2s = precomputed_diffs(preds, pair_folder, d, split, get_jsd, "JSD", m1_name, m3_name)
                     jsd_values[d] = (jsd_w_s, jsd_s_w2s, jsd_w_w2s)
 
-                plot_multiple_triangles_from_values(jsd_values, datasets, padding=0.3, savepath=f"{savepath}/jsdtriangles_{split}.png")
+                plot_multiple_triangles_from_values(jsd_values, datasets, padding=0.3, savepath=f"{savepath}/jsdtriangles_{split}.png", m1name=m1_name, m2name=m2_name, m3name=m3_name)
 
                 for diff_func, diff_func_name in [(get_jsd, "JSD"), (get_kappa_mcqs, "Kappa"), (get_diffp, "Prediction Diff%")]:
                     diff_matrices = {}

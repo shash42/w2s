@@ -134,7 +134,7 @@ def populate_preds(preds, datasets, model_names, datasplits, folder_name, weak_m
                     preds[dname][mname][split] = add_preds(Dataset.from_file(preds_path))
                     if verbose: print(f"Loaded {len(preds[dname][mname][split])} examples for {split} split")
                 except:
-                    print(f"Error loading {dname} predictions for ({weak_model}, {strong_model})")
+                    print(f"Error loading {dname} predictions for mtype {mname} in model pair ({weak_model}, {strong_model})")
     return preds
 
 def precomputed_accs(preds, foldername, dname, mnames, split):
@@ -234,7 +234,7 @@ def add_preds(ds):
     ds = ds.map(lambda x: {'pred': x['soft_pred'] > 0.5})
     return ds
 
-def acc_buckets(dsref1, dsref2, dsmain):
+def acc_buckets(dsref1, dsref2, dsmain, verbose=False):
     # Convert lists of dictionaries to Pandas DataFrames
     df1 = pd.DataFrame(dsref1)
     df2 = pd.DataFrame(dsref2)
@@ -278,7 +278,7 @@ def acc_buckets(dsref1, dsref2, dsmain):
             pass
     
     # Print the final bucket counts
-    print(buckets)
+    if verbose: print(buckets)
     return buckets
 
 def pretty_print(dsref1, dsref2, dsmain):

@@ -244,7 +244,7 @@ def run_train(cfg: SFTConfig):
     print("\n\033[32m===== Training strong finetune model on same train split as weak_ft =====\033[0m")
     model_cfg, run_name = get_model_and_run_name(cfg.strong_model_name, "strong_ft2")
     train_args["run_name"] = run_name
-    train_args["output_dir"] = str(root / strong_model_last_name / cfg_name / "strong")
+    train_args["output_dir"] = str(root / strong_model_last_name / cfg_name / "strong2")
     train_args["learning_rate"] = cfg.strong_lr
     strong_ds_dict = DatasetDict(
         {

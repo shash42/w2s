@@ -9,7 +9,7 @@ output = $(LOGS_DIR)/out/job.$(Cluster).$(dataset).$(Process).out
 log = $(LOGS_DIR)/log/job.$(Cluster).$(dataset).$(Process).log
 
 # Specs
-request_memory = 8192
+request_memory = 12288
 request_cpus = 2
 request_gpus = 1
 requirements = (TARGET.CUDADeviceName == "NVIDIA A100-SXM4-80GB")

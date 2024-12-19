@@ -9,4 +9,4 @@ weak_model_name="$3"
 strong_model_name="$4"
 
 # execute python script
-python run.py --dataset="$dataset" --run_name="$run_name" --weak_model_name="$weak_model_name" --strong_model_name="$strong_model_name"
+python run.py --dataset="$dataset" --run_name="$run_name" --weak_model_name="$weak_model_name" --strong_model_name="$strong_model_name" --loss="xent"

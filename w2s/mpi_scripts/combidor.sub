@@ -5,9 +5,9 @@ executable=/home/sgoel/w2s/w2s/mpi_scripts/run.sh
 arguments = $(dataset) epochs_3 $(weak_model) $(strong_model)
 
 # Logs
-error = $(LOGS_DIR)/err/job.$(Cluster).$(dataset).$(weak_model).$(strong_model).err
-output = $(LOGS_DIR)/out/job.$(Cluster).$(dataset).$(weak_model).$(strong_model).out
-log = $(LOGS_DIR)/log/job.$(Cluster).$(dataset).$(weak_model).$(strong_model).log
+error = $(LOGS_DIR)/err/job.$(Cluster).$(dataset).$(sanitized_weak_model).$(sanitized_strong_model).err
+output = $(LOGS_DIR)/out/job.$(Cluster).$(dataset).$(sanitized_weak_model).$(sanitized_strong_model).out
+log = $(LOGS_DIR)/log/job.$(Cluster).$(dataset).$(sanitized_weak_model).$(sanitized_strong_model).log
 
 # Specs
 request_memory = 12288
@@ -18,4 +18,4 @@ requirements = (TARGET.CUDADeviceName == "NVIDIA A100-SXM4-80GB")
 # datasets = anli-r2 sciq cola ethics-utilitarianism piqa sst2 twitter-sentiment boolq 
 # datasets = dream mc_taco multirc quail quartz social_i_qa wic cosmos_qa 
 
-queue dataset, weak_model, strong_model from combinations.txt
+queue dataset, weak_model, strong_model, sanitized_weak_model, sanitized_strong_model from combinations.txt

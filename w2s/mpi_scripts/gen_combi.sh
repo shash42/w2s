@@ -11,11 +11,24 @@ output_file="combinations.txt"
 # Remove existing file if it exists
 rm -f $output_file
 
-# Generate all combinations
+# Function to extract substring after the first slash
+sanitize_name() {
+    local name="$1"
+    if [[ "$name" == */* ]]; then
+        echo "${name#*/}"
+    else
+        echo "$name"
+    fi
+}
+
+# Generate all combinations with sanitized model names
 for dataset in "${datasets[@]}"; do
     for weak_model in "${weak_models[@]}"; do
+        sanitized_weak_model=$(sanitize_name "$weak_model")
         for strong_model in "${strong_models[@]}"; do
-            echo "$dataset $weak_model $strong_model" >> $output_file
+            sanitized_strong_model=$(sanitize_name "$strong_model")
+            # Write to combinations.txt: dataset weak_model strong_model sanitized_weak_model sanitized_strong_model
+            echo "$dataset $weak_model $strong_model $sanitized_weak_model $sanitized_strong_model" >> "$output_file"
         done
     done
 done

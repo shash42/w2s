@@ -71,29 +71,29 @@ def run_train(cfg: SFTConfig):
         return model_cfg, run_name
 
     # train weak finetune, get predictions
-    print("\n\033[32m===== Training weak finetune model =====\033[0m")
+    # print("\n\033[32m===== Training weak finetune model =====\033[0m")
     model_cfg, run_name = get_model_and_run_name(cfg.weak_model_name, "weak_ft")
     weak_model_last_name = cfg.weak_model_name.split("/")[-1]
     strong_model_last_name = cfg.strong_model_name.split("/")[-1]
-    train_args["run_name"] = run_name
-    train_args["output_dir"] = str(root / weak_model_last_name / cfg_name / "weak")
-    train_args["learning_rate"] = cfg.weak_lr
-    weak_ds_dict = DatasetDict(
-        {
-            "train": splits["weak_train"],
-            "val": splits["val"],
-            "test": splits["test"],
-        }
-    )
-    weak_predict_dict = {"train": splits["strong_train"], "val": splits["val"], "test": splits["test"]}
-    train(
-        weak_ds_dict,
-        model_cfg,
-        TrainingArguments(**train_args),
-        cfg.to_dict(),
-        transfer=False,
-        predict_dict=weak_predict_dict,
-    )
+    # train_args["run_name"] = run_name
+    # train_args["output_dir"] = str(root / weak_model_last_name / cfg_name / "weak")
+    # train_args["learning_rate"] = cfg.weak_lr
+    # weak_ds_dict = DatasetDict(
+    #     {
+    #         "train": splits["weak_train"],
+    #         "val": splits["val"],
+    #         "test": splits["test"],
+    #     }
+    # )
+    # weak_predict_dict = {"train": splits["strong_train"], "val": splits["val"], "test": splits["test"]}
+    # train(
+    #     weak_ds_dict,
+    #     model_cfg,
+    #     TrainingArguments(**train_args),
+    #     cfg.to_dict(),
+    #     transfer=False,
+    #     predict_dict=weak_predict_dict,
+    # )
 
     # load weak predictions
     # weak_preds_root = root / weak_model_last_name / cfg_name / "weak" / "predictions"
@@ -191,31 +191,31 @@ def run_train(cfg: SFTConfig):
     # cfg.disable_finetune = False
 
     # train strong floor without lora
-    # print("\n\033[32m===== Training strong base model on same train split as weak_ft =====\033[0m")
-    # cfg.disable_lora = True
-    # cfg.disable_finetune = True
-    # model_cfg, run_name = get_model_and_run_name(cfg.strong_model_name, "strong_base2")
-    # train_args["run_name"] = run_name
-    # train_args["output_dir"] = str(root / strong_model_last_name / cfg_name / "strong_base2")
-    # train_args["learning_rate"] = cfg.strong_lr
-    # strong_ds_dict = DatasetDict(
-    #     {
-    #         "train": splits["weak_train"],
-    #         "val": splits["val"],
-    #         "test": splits["test"],
-    #     }
-    # )
-    # strong_predict_dict = {"train": splits["strong_train"], "val": splits["val"], "test": splits["test"]}
-    # train(
-    #     strong_ds_dict,
-    #     model_cfg,
-    #     TrainingArguments(**train_args),
-    #     cfg.to_dict(),
-    #     transfer=False,
-    #     predict_dict=strong_predict_dict
-    # )
-    # cfg.disable_lora = False
-    # cfg.disable_finetune = False
+    print("\n\033[32m===== Training strong base model on same train split as weak_ft =====\033[0m")
+    cfg.disable_lora = True
+    cfg.disable_finetune = True
+    model_cfg, run_name = get_model_and_run_name(cfg.strong_model_name, "strong_base2")
+    train_args["run_name"] = run_name
+    train_args["output_dir"] = str(root / strong_model_last_name / cfg_name / "strong_base2")
+    train_args["learning_rate"] = cfg.strong_lr
+    strong_ds_dict = DatasetDict(
+        {
+            "train": splits["weak_train"],
+            "val": splits["val"],
+            "test": splits["test"],
+        }
+    )
+    strong_predict_dict = {"train": splits["strong_train"], "val": splits["val"], "test": splits["test"]}
+    train(
+        strong_ds_dict,
+        model_cfg,
+        TrainingArguments(**train_args),
+        cfg.to_dict(),
+        transfer=False,
+        predict_dict=strong_predict_dict
+    )
+    cfg.disable_lora = False
+    cfg.disable_finetune = False
 
     # train strong ceil
     # print("\n\033[32m===== Training strong finetune model (ceil) =====\033[0m")
@@ -241,27 +241,27 @@ def run_train(cfg: SFTConfig):
     # )
 
     # train strong ceil on weak split
-    # print("\n\033[32m===== Training strong finetune model on same train split as weak_ft =====\033[0m")
-    # model_cfg, run_name = get_model_and_run_name(cfg.strong_model_name, "strong_ft2")
-    # train_args["run_name"] = run_name
-    # train_args["output_dir"] = str(root / strong_model_last_name / cfg_name / "strong2")
-    # train_args["learning_rate"] = cfg.strong_lr
-    # strong_ds_dict = DatasetDict(
-    #     {
-    #         "train": splits["weak_train"],
-    #         "val": splits["val"],
-    #         "test": splits["test"],
-    #     }
-    # )
-    # strong_predict_dict = {"train": splits["strong_train"], "val": splits["val"], "test": splits["test"]}
-    # train(
-    #     strong_ds_dict,
-    #     model_cfg,
-    #     TrainingArguments(**train_args),
-    #     cfg.to_dict(),
-    #     transfer=False,
-    #     predict_dict=strong_predict_dict
-    # )
+    print("\n\033[32m===== Training strong finetune model on same train split as weak_ft =====\033[0m")
+    model_cfg, run_name = get_model_and_run_name(cfg.strong_model_name, "strong_ft2")
+    train_args["run_name"] = run_name
+    train_args["output_dir"] = str(root / strong_model_last_name / cfg_name / "strong2")
+    train_args["learning_rate"] = cfg.strong_lr
+    strong_ds_dict = DatasetDict(
+        {
+            "train": splits["weak_train"],
+            "val": splits["val"],
+            "test": splits["test"],
+        }
+    )
+    strong_predict_dict = {"train": splits["strong_train"], "val": splits["val"], "test": splits["test"]}
+    train(
+        strong_ds_dict,
+        model_cfg,
+        TrainingArguments(**train_args),
+        cfg.to_dict(),
+        transfer=False,
+        predict_dict=strong_predict_dict
+    )
 
     # print("\n\033[32m===== Training weak finetune model on w2s train split =====\033[0m")
     # model_cfg, run_name = get_model_and_run_name(cfg.weak_model_name, "weak_ft2")

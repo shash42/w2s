@@ -543,17 +543,17 @@ if __name__ == "__main__":
     mode = sys.argv[1] if len(sys.argv) > 1 else "all"  # default "all"
     
     folder_name = "epochs_3"
-    model_names = ["weak_ft", "strong_base", "strong_base2", "mean", "w2s", "strong_ft", "strong2", "diff_ceil"]
-    m1_name, m2_name, m3_name = "weak_ft", "strong2", "w2s"
-    mtriplet_name = "strft2"
+    model_names = ["weak_ft", "weak2", "strong_base", "strong_base2", "mean", "w2s", "w2snaive", "strong_ft", "strong2", "diff_ceil"]
+    m1_name, m2_name, m3_name = "weak_ft", "weak2", "w2s"
+    mtriplet_name = "w_w2_w2s"
     # If you only want a subset, uncomment below:
     # model_names = ["weak_ft", "strong_base", "w2s", "strong_ft"]
-    datasplits = ["test"]
+    split = "test"
+    datasplits = [split]
     datasets = ["anli-r2", "boolq", "cola", "ethics-utilitarianism", "sciq", "sst2", "twitter-sentiment"]
     skip_list = [("gemma-2-9b", "Llama-3.1-8B"), ("Llama-3.1-8B", "gemma-2-9b"), ("Llama-3.1-8B", "Llama-3.1-8B"), ("Qwen2.5-0.5B", "OLMo-2-1124-7B"), ("Qwen2.5-0.5B", "Qwen2.5-14B"), ("Qwen2.5-0.5B", "gemma-2-27b"), ("Qwen2.5-0.5B", "granite-3.0-8b-base"), ("gemma-2-2b", "OLMo-2-1124-7B")]
 
     preds_dict = get_preds_all_modelpairs(folder_name, model_names, datasplits=datasplits, datasets=datasets, skip_list=skip_list)
-    split = "test"
 
     if mode == "average":
         os.makedirs(f"results/{folder_name}/plots/{mtriplet_name}", exist_ok=True)

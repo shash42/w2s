@@ -22,7 +22,7 @@ def get_brier(ds):
 def get_jsd(ds1, ds2):
     return np.mean(jsd(get_logits(ds1), get_logits(ds2)))
 
-def get_kappa_mcqs(m1, m2, n_options=4):
+def get_kappa_mcqs(m1, m2, n_options=2):
     same, total, m1_corr, m2_corr, samewrong = 0, 0, 0, 0, 0
     for s1, s2 in zip(m1, m2):
         total += 1

@@ -41,6 +41,23 @@ def get_kappa_mcqs(m1, m2, n_options=2):
     kappa = (cobs - cexp) / (1 - cexp)
     return kappa
 
+def get_probkappa_mcqs(m1, m2, n_options=2):
+    cobs, total = 0, 0
+    p1corr, p2corr = 0, 0
+    
+    for s1, s2 in zip(m1, m2):
+        total += 1
+        cobs += s1["soft_pred"] * s2["soft_pred"] + (1 - s1["soft_pred"]) * (1 - s2["soft_pred"])
+        p1corr += s1["soft_pred"] if s1["labels"] == 1 else 1 - s1["soft_pred"]
+        p2corr += s2["soft_pred"] if s2["labels"] == 1 else 1 - s2["soft_pred"]
+
+    cobs/=total
+    p1corr/=total
+    p2corr/=total
+    cexp = p1corr * p2corr + (1 - p1corr) * (1 - p2corr)
+    kappa = (cobs - cexp) / (1 - cexp)
+    return kappa
+
 def get_diffp(ds1, ds2):
     #s1[pred] != s2['pred']
     diffp = 0
@@ -56,7 +73,7 @@ def get_acc(ds):
 
 def compute_mean_preds(preds, dname, split):
     weak_split = preds[dname]["weak_ft"][split]
-    strong_split = preds[dname]["strong_base"][split]
+    strong_split = preds[dname]["strong_base2"][split]
 
     # Convert columns to numpy arrays for vectorized operations
     weak_soft = np.array(weak_split["soft_pred"], dtype=np.float32)
@@ -78,7 +95,7 @@ def compute_mean_preds(preds, dname, split):
 
 def compute_diff_ceil(preds, dname, split):
     weak_split = preds[dname]["weak_ft"][split]
-    strong_split = preds[dname]["strong_base"][split]
+    strong_split = preds[dname]["strong_base2"][split]
 
     # Convert columns to numpy arrays
     weak_pred = np.array(weak_split["pred"], dtype=np.bool_)
@@ -136,6 +153,7 @@ def populate_preds(preds, datasets, model_names, datasplits, folder_name, weak_m
                 except:
                     print(f"Error loading {dname} predictions for mtype {mname} in model pair ({weak_model}, {strong_model})")
     return preds
+
 
 def precomputed_accs(preds, foldername, dname, mnames, split):
     """

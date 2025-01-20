@@ -1,21 +1,23 @@
 import sys
 import os
 import matplotlib.pyplot as plt
+from networkx import weakly_connected_components
 import numpy as np
 from sklearn.metrics import ConfusionMatrixDisplay
 import json
 from scipy.cluster.hierarchy import linkage, leaves_list
 import seaborn as sns
+from statsmodels.stats.proportion import proportion_confint  # Import for confidence intervals
+from tqdm import tqdm, trange
 
-from metrics import get_acc, get_jsd, get_kappa_mcqs, get_diffp, populate_preds, precomputed_accs, precomputed_diffs, acc_buckets
+from metrics import get_acc, get_jsd, get_kappa_mcqs, get_probkappa_mcqs, get_diffp, populate_preds, precomputed_accs, precomputed_diffs, acc_buckets
 
 #########################################
 # Plotting Functions
 #########################################
 
-def grouped_bar_plot_accs(accs, split='test', metric_name="Accuracy", savepath=None, datasets_list=None):
+def grouped_bar_plot_accs(accs, split='test', metric_name="Accuracy", savepath=None, datasets_list=None, average_across_datasets=False):
     fig, ax = plt.subplots(figsize=(10, 6))
-    barWidth = 0.12
     colors = ['#f28e2b', '#e15759', '#000000', '#76b7b2', '#59a14f', '#4e79a7']
 
     # Convert {model: {dset: val}} to {model: [vals]} if needed
@@ -28,34 +30,55 @@ def grouped_bar_plot_accs(accs, split='test', metric_name="Accuracy", savepath=N
         if datasets_list is None:
             raise ValueError("datasets_list must be provided if accs are already lists.")
     
-    num_datasets = len(datasets_list)
-    r = range(num_datasets)
     model_names = list(accs.keys())
-
-    for i, mname in enumerate(model_names):
-        vals = accs[mname]
-        ax.bar([x + barWidth * i for x in r], vals, width=barWidth, color=colors[i % len(colors)], label=mname)
     
-    ax.set_xticks([x + barWidth * (len(model_names) - 1) / 2 for x in r])
-    ax.set_xticklabels(datasets_list, rotation=45, ha='right', fontsize=10)
+    if average_across_datasets:
+        # Calculate average for each model across datasets
+        avg_accs = {model: np.mean(vals) for model, vals in accs.items()}
+        
+        # For averaged plot, use wider bars with spacing
+        barWidth = 0.6
+        spacing = 1  # Space between bars
+        positions = np.arange(len(model_names)) * spacing
+
+        # Create bars
+        bars = ax.bar(positions, 
+                     [avg_accs[model] for model in model_names],
+                     width=barWidth, 
+                     color=colors[:len(model_names)])
+        
+        # Set x-ticks at bar positions
+        ax.set_xticks(positions)
+        ax.set_xticklabels(model_names, rotation=45, ha='right', fontsize=10)
+    else:
+        # Original grouped bar plot logic
+        barWidth = 0.12
+        num_datasets = len(datasets_list)
+        r = range(num_datasets)
+        
+        for i, mname in enumerate(model_names):
+            vals = accs[mname]
+            ax.bar([x + barWidth * i for x in r], vals, width=barWidth, 
+                  color=colors[i % len(colors)], label=mname)
+        
+        ax.set_xticks([x + barWidth * (len(model_names) - 1) / 2 for x in r])
+        ax.set_xticklabels(datasets_list, rotation=45, ha='right', fontsize=10)
+        ax.legend(title='Models', bbox_to_anchor=(1.05, 1), loc='upper left', 
+                 fontsize=10, title_fontsize='11')
+    
     ax.set_yticks(range(0, 110, 10))
     ax.set_ylabel(metric_name, fontsize=12)
-    ax.set_title(f"{metric_name} of Models on {split.capitalize()} Split", fontsize=14, fontweight='bold')
+    title_prefix = "Average " if average_across_datasets else ""
+    ax.set_title(f"{title_prefix}{metric_name} of Models on {split.capitalize()} Split", 
+                fontsize=14, fontweight='bold')
     ax.set_ylim(50, 100)
     ax.yaxis.grid(True, linestyle='--', alpha=0.7)
-    ax.legend(title='Models', bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10, title_fontsize='11')
     plt.tight_layout()
     if savepath is None:
         plt.show()
     else:
         plt.savefig(savepath, bbox_inches='tight')
         print(f"Saved grouped bar plot to {savepath}")
-
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.metrics import ConfusionMatrixDisplay
-from statsmodels.stats.proportion import proportion_confint  # Import for confidence intervals
 
 def plot_conf_mat_from_buckets(
     buckets_dict, 
@@ -64,83 +87,40 @@ def plot_conf_mat_from_buckets(
     mref2="strong_base",
     macc="w2s",
     savepath=None,
-    confidence_level=0.95  # You can adjust the confidence level if needed
+    confidence_level=0.95,
+    average_across_datasets=False
 ):
     """
-    Plots 2x2 confusion matrices from precomputed buckets_dict for each dataset,
-    including confidence intervals for the accuracies.
+    Plots 2x2 confusion matrices from precomputed buckets_dict.
+    If average_across_datasets is True, combines data across all datasets into a single plot.
     """
-    num_datasets = len(datasets_list)
-    fig, axes = plt.subplots(1, num_datasets, figsize=(5 * num_datasets, 5))
-    if num_datasets == 1:
-        axes = [axes]  # ensure iterable
-
-    for dset, ax in zip(datasets_list, axes):
-        # Extract confusion buckets for this dataset
-        b = buckets_dict[dset]
-        # For convenience:
-        correct_cc, total_cc = b['cc']['correct'], b['cc']['total']
-        correct_cw, total_cw = b['cw']['correct'], b['cw']['total']
-        correct_wc, total_wc = b['wc']['correct'], b['wc']['total']
-        correct_ww, total_ww = b['ww']['correct'], b['ww']['total']
-
-        total = b['cc']['total'] + b['cw']['total'] + b['wc']['total'] + b['ww']['total']
-        # Calculate confidence intervals for each cell
-        ci_cc = proportion_confint(correct_cc, total_cc, alpha=1 - confidence_level, method='wilson') if total_cc > 0 else (0, 0)
-        ci_cw = proportion_confint(correct_cw, total_cw, alpha=1 - confidence_level, method='wilson') if total_cw > 0 else (0, 0)
-        ci_wc = proportion_confint(correct_wc, total_wc, alpha=1 - confidence_level, method='wilson') if total_wc > 0 else (0, 0)
-        ci_ww = proportion_confint(correct_ww, total_ww, alpha=1 - confidence_level, method='wilson') if total_ww > 0 else (0, 0)
-
-        # Build a 2x2 matrix of normalized values: how often the main model is "Correct" within each bucket
-        cm = np.array([
-            [
-                correct_cc / total_cc if total_cc > 0 else 0.0, 
-                correct_cw / total_cw if total_cw > 0 else 0.0
-            ],
-            [
-                correct_wc / total_wc if total_wc > 0 else 0.0, 
-                correct_ww / total_ww if total_ww > 0 else 0.0
-            ]
-        ])
-
-        # Build the text annotations (accuracy ± CI)
-        cm_text = np.array([
-            [
-                f"\n\n +-{(ci_cc[1] - ci_cc[0])/2:.2f} (n:{total_cc / total * 100:.2f}%)" if total_cc > 0 else "0.00\n(0, 0)",
-                f"\n\n +-{(ci_cw[1] - ci_cw[0])/2:.2f} (n:{total_cw / total * 100:.2f}%)" if total_cw > 0 else "0.00\n(0, 0)"
-            ],
-            [
-                f"\n\n +-{(ci_wc[1] - ci_wc[0])/2:.2f} (n:{total_wc / total * 100:.2f}%)" if total_wc > 0 else "0.00\n(0, 0)",
-                f"\n\n +-{(ci_ww[1] - ci_ww[0])/2:.2f} (n:{total_ww / total * 100:.2f}%)" if total_ww > 0 else "0.00\n(0, 0)"
-            ]
-        ])
-
-        # Use sklearn's ConfusionMatrixDisplay for neat plotting
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["Correct", "Wrong"])
-        disp.plot(ax=ax, cmap="Blues", colorbar=False, values_format=".2f", )  # or values_format=".2f" for 2 decimal places
-        for text in disp.text_.ravel():  # Adjust the annotations inside the matrix
-            text.set_fontsize(14)       # Adjust this value as needed
-
-        # Insert confidence interval annotations
-        for i in range(cm.shape[0]):
-            for j in range(cm.shape[1]):
-                ax.text(j, i, cm_text[i, j],
-                        ha="center", va="center", fontsize=12, color="orange")
-
-        # Calculate overall accuracy and its confidence interval for the title
-        total_correct = b['cc']['correct'] + b['cw']['correct'] + b['wc']['correct'] + b['ww']['correct']
-        overall_acc = total_correct / total if total > 0 else 0.0
-        ci_overall = proportion_confint(total_correct, total, alpha=1 - confidence_level, method='wilson') if total > 0 else (0, 0)
-
-        ax.set_title(
-            f"{dset}\nTotal: {total}\n{macc} Acc: {overall_acc * 100:.1f}% "
-            f"({ci_overall[0] * 100:.1f}%, {ci_overall[1] * 100:.1f}%)",
-            fontsize=14
-        )
-        ax.set_xlabel(f"{mref2} Prediction", fontsize=14)
-        ax.set_ylabel(f"{mref1} Prediction", fontsize=14)
-        ax.tick_params(axis='both', which='major', labelsize=12)
-
+    if average_across_datasets:
+        # Combine buckets across datasets
+        combined_buckets = {
+            'cc': {'correct': 0, 'total': 0},
+            'cw': {'correct': 0, 'total': 0},
+            'wc': {'correct': 0, 'total': 0},
+            'ww': {'correct': 0, 'total': 0}
+        }
+        
+        for dset in datasets_list:
+            for bucket in ['cc', 'cw', 'wc', 'ww']:
+                combined_buckets[bucket]['correct'] += buckets_dict[dset][bucket]['correct']
+                combined_buckets[bucket]['total'] += buckets_dict[dset][bucket]['total']
+        
+        fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+        plot_single_conf_mat(combined_buckets, ax, mref1, mref2, macc, 
+                           "Average across datasets", confidence_level)
+    else:
+        num_datasets = len(datasets_list)
+        fig, axes = plt.subplots(1, num_datasets, figsize=(5 * num_datasets, 5))
+        if num_datasets == 1:
+            axes = [axes]
+        
+        for dset, ax in zip(datasets_list, axes):
+            plot_single_conf_mat(buckets_dict[dset], ax, mref1, mref2, macc, 
+                               dset, confidence_level)
+    
     plt.tight_layout()
     if savepath:
         plt.savefig(savepath, bbox_inches='tight')
@@ -148,6 +128,226 @@ def plot_conf_mat_from_buckets(
         print(f"Saved confusion matrices to {savepath}")
     else:
         plt.show()
+
+def plot_single_conf_mat(buckets, ax, mref1, mref2, macc, title_prefix, confidence_level):
+    """Helper function to plot a single confusion matrix."""
+    correct_cc, total_cc = buckets['cc']['correct'], buckets['cc']['total']
+    correct_cw, total_cw = buckets['cw']['correct'], buckets['cw']['total']
+    correct_wc, total_wc = buckets['wc']['correct'], buckets['wc']['total']
+    correct_ww, total_ww = buckets['ww']['correct'], buckets['ww']['total']
+
+    total = total_cc + total_cw + total_wc + total_ww
+
+    # Calculate confidence intervals
+    ci_cc = proportion_confint(correct_cc, total_cc, alpha=1-confidence_level, method='wilson') if total_cc > 0 else (0, 0)
+    ci_cw = proportion_confint(correct_cw, total_cw, alpha=1-confidence_level, method='wilson') if total_cw > 0 else (0, 0)
+    ci_wc = proportion_confint(correct_wc, total_wc, alpha=1-confidence_level, method='wilson') if total_wc > 0 else (0, 0)
+    ci_ww = proportion_confint(correct_ww, total_ww, alpha=1-confidence_level, method='wilson') if total_ww > 0 else (0, 0)
+
+    cm = np.array([
+        [correct_cc/total_cc if total_cc > 0 else 0.0, correct_cw/total_cw if total_cw > 0 else 0.0],
+        [correct_wc/total_wc if total_wc > 0 else 0.0, correct_ww/total_ww if total_ww > 0 else 0.0]
+    ])
+
+    cm_text = np.array([
+        [
+            f"\n\n +-{(ci_cc[1]-ci_cc[0])/2:.2f} (n:{total_cc/total*100:.2f}%)" if total_cc > 0 else "0.00\n(0, 0)",
+            f"\n\n +-{(ci_cw[1]-ci_cw[0])/2:.2f} (n:{total_cw/total*100:.2f}%)" if total_cw > 0 else "0.00\n(0, 0)"
+        ],
+        [
+            f"\n\n +-{(ci_wc[1]-ci_wc[0])/2:.2f} (n:{total_wc/total*100:.2f}%)" if total_wc > 0 else "0.00\n(0, 0)",
+            f"\n\n +-{(ci_ww[1]-ci_ww[0])/2:.2f} (n:{total_ww/total*100:.2f}%)" if total_ww > 0 else "0.00\n(0, 0)"
+        ]
+    ])
+
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=["Correct", "Wrong"])
+    disp.plot(ax=ax, cmap="Greens", colorbar=False, values_format=".2f")
+    
+    for text in disp.text_.ravel():
+        text.set_fontsize(14)
+
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            ax.text(j, i, cm_text[i, j], ha="center", va="center", fontsize=12, color="orange")
+
+    total_correct = correct_cc + correct_cw + correct_wc + correct_ww
+    overall_acc = total_correct/total if total > 0 else 0.0
+    ci_overall = proportion_confint(total_correct, total, alpha=1-confidence_level, method='wilson') if total > 0 else (0, 0)
+
+    ax.set_title(
+        f"{title_prefix}\nTotal: {total}\n{macc} Acc: {overall_acc*100:.1f}% "
+        f"({ci_overall[0]*100:.1f}%, {ci_overall[1]*100:.1f}%)",
+        fontsize=14
+    )
+    ax.set_xlabel(f"{mref2} Prediction", fontsize=14)
+    ax.set_ylabel(f"{mref1} Prediction", fontsize=14)
+    ax.tick_params(axis='both', which='major', labelsize=12)
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+def plot_quadrants_with_subrects(
+    quadrant_acc,
+    weak_models,
+    strong_models,
+    mref1="weak_ft",
+    mref2="strong_base",
+    macc="w2s",
+    title_prefix="Disentangling Accuracy of Weak to Strong Models",
+    savepath=None,
+):
+    """
+    Plots a 2x2 grid of quadrants (cc, cw, wc, ww), each a *square* subplot,
+    subdivided into a W×S grid of cells for (weak_model, strong_model) pairs.
+    If W != S, sub-cells become rectangles, but each entire quadrant is square.
+
+    The 4 quadrants are arranged like a confusion matrix:
+      top-left = cc  (both correct)
+      top-right = cw (weak correct, strong wrong)
+      bot-left = wc  (weak wrong, strong correct)
+      bot-right= ww  (both wrong)
+
+    One colorbar is placed on the right; "Correct"/"Wrong" ticks appear on
+    both axes, and there's a single label for each axis:
+      y-axis: "Weak Supervisor Prediction"
+      x-axis: "Strong Elicited Prediction"
+
+    The function also prints per-pair accuracies and summary stats for each quadrant.
+    """
+
+    W = len(weak_models)
+    S = len(strong_models)
+
+    # Prepare four arrays of shape (W, S)
+    cc_data = np.zeros((W, S))
+    cw_data = np.zeros((W, S))
+    wc_data = np.zeros((W, S))
+    ww_data = np.zeros((W, S))
+
+    quadrant_values = {
+        'cc': [],
+        'cw': [],
+        'wc': [],
+        'ww': []
+    }
+
+    # Fill from quadrant_acc
+    for i, w_model in enumerate(weak_models):
+        for j, s_model in enumerate(strong_models):
+            stats = quadrant_acc[(w_model, s_model)]
+            for quad_name, arr in zip(('cc','cw','wc','ww'),
+                                      (cc_data, cw_data, wc_data, ww_data)):
+                c = stats[quad_name]['correct']
+                t = stats[quad_name]['total']
+                acc = (c / t) if t > 0 else 0.0
+                arr[i, j] = acc
+                quadrant_values[quad_name].append(acc)
+
+    # Create 2x2 subplots, each forced to be a square
+    fig, axes = plt.subplots(2, 2, figsize=(8, 8))
+    # Remove spacing between subplots so they appear joined
+    plt.subplots_adjust(wspace=0, hspace=0)
+
+    # For reference, we define quadrant -> (row, col):
+    #   cc -> (0,0), cw -> (0,1),
+    #   wc -> (1,0), ww -> (1,1)
+
+    # Plot each quadrant
+    # Top-left = cc
+    ax_cc = axes[0,0]
+    im_cc = ax_cc.pcolormesh(cc_data, cmap='Greens', vmin=0.0, vmax=1.0,
+                             edgecolors='gray', linewidth=0.1, shading='auto')
+    ax_cc.set_box_aspect(1)
+
+    # Top-right = cw
+    ax_cw = axes[0,1]
+    im_cw = ax_cw.pcolormesh(cw_data, cmap='Greens', vmin=0.0, vmax=1.0,
+                             edgecolors='gray', linewidth=0.1, shading='auto')
+    ax_cw.set_box_aspect(1)
+
+    # Bottom-left = wc
+    ax_wc = axes[1,0]
+    im_wc = ax_wc.pcolormesh(wc_data, cmap='Greens', vmin=0.0, vmax=1.0,
+                             edgecolors='gray', linewidth=0.1, shading='auto')
+    ax_wc.set_box_aspect(1)
+
+    # Bottom-right = ww
+    ax_ww = axes[1,1]
+    im_ww = ax_ww.pcolormesh(ww_data, cmap='Greens', vmin=0.0, vmax=1.0,
+                             edgecolors='gray', linewidth=0.1, shading='auto')
+    ax_ww.set_box_aspect(1)
+
+    # Hide standard ticks/labels inside each axis
+    for ax in axes.flat:
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    # Put short quadrant titles *inside* each quadrant
+    # Position them a bit away from edges so they don't overlap
+    ax_cc.text(0.5, 0.5, "Both",
+               ha='center', va='center', transform=ax_cc.transAxes,
+               fontsize=17, fontweight='bold')
+    ax_cw.text(0.5, 0.5, "Complementary",
+               ha='center', va='center', transform=ax_cw.transAxes,
+               fontsize=17, fontweight='bold')
+    ax_wc.text(0.5, 0.5, "Elicitable",
+               ha='center', va='center', transform=ax_wc.transAxes,
+               fontsize=17, fontweight='bold')
+    ax_ww.text(0.5, 0.5, "Neither",
+               ha='center', va='center', transform=ax_ww.transAxes,
+               fontsize=17, fontweight='bold')
+
+    # We want "Correct"/"Wrong" on each axis, like a confusion matrix.
+    # We'll place text near the midpoints of each outer axis.
+    # Top row => y in [0..1], x in [0..1] for each subplot
+    # For "Correct" on top-left x-axis, we place text below that axis
+    # But let's do a simpler approach: place them on the edges with fig.text
+
+    # Label row=0 with "Correct" for left subplot, "Wrong" for right subplot
+    fig.text(0.32, 0.07, "Correct", ha='center', va='center', fontsize=18)  # bottom center of left subplots
+    fig.text(0.64, 0.07, "Wrong",   ha='center', va='center', fontsize=18)  # bottom center of right subplots
+    # Label row=1 with "Correct" for top subplot, "Wrong" for bottom subplot
+    # But we need them on the left side, so we do:
+    fig.text(0.05, 0.32, "Wrong",   ha='center', va='center', rotation='vertical', fontsize=18)
+    fig.text(0.05, 0.64, "Correct", ha='center', va='center', rotation='vertical', fontsize=18)
+
+    # Also label the entire figure's axes
+    fig.text(0.5, 0.0, f"{mref2} Prediction", ha='center', va='center', fontsize=20)
+    fig.text(0.0, 0.5, f"{mref1} Prediction", ha='center', va='center',
+             rotation='vertical', fontsize=20)
+
+    # Title at top
+    fig.suptitle(
+        f"{title_prefix}\n(Sub-rectangles for each of {W}×{S} model pairs)",
+        fontsize=20, y=0.98
+    )
+
+    # Single colorbar to the right
+    # We can pick one of the images (im_cc) or a list of them
+    cbar = fig.colorbar(im_cc, ax=axes.ravel(), fraction=0.04, pad=0.07)
+    cbar.set_label(f"{macc} Accuracy", fontsize=18)
+
+    if savepath:
+        plt.savefig(savepath, bbox_inches='tight')
+        plt.close()
+        print(f"Saved plot to {savepath}")
+    else:
+        plt.show()
+
+    # --------------- Print per-pair and summary stats ---------------
+    for qname in ['cc','cw','wc','ww']:
+        print(f"Quadrant: {qname}")
+        acc_list = quadrant_values[qname]
+        idx = 0
+        for w_model in weak_models:
+            for s_model in strong_models:
+                print(f"  Pair=({w_model}, {s_model}): {acc_list[idx]:.3f}")
+                idx += 1
+        arr = np.array(acc_list)
+        mean_ = arr.mean() if len(arr) > 0 else 0.0
+        std_ = arr.std(ddof=1) if len(arr) > 1 else 0.0
+        n_ = len(arr)
+        print(f"  => Quadrant {qname} summary: mean={mean_:.3f}, stdev={std_:.3f}, n={n_}\n")
 
 
 def plot_diff_metric_from_values(metrics_per_pair, datasets_list, metric_name, savepath=None):
@@ -407,6 +607,62 @@ def compute_confusion_buckets_for_average(preds_dict, datasets_list, mref1, mref
 
     return agg_buckets_dict
 
+def compute_per_pair_quadrant_accuracies(
+    preds_dict,
+    datasets_list,
+    weak_models,
+    strong_models,
+    mref1="weak_ft",
+    mref2="strong_base",
+    macc="w2s",
+    split="test",
+):
+    """
+    Computes w2s accuracy in each quadrant (cc, cw, wc, ww) for every (weak_model, strong_model) pair,
+    aggregated across all datasets in datasets_list.
+
+    Returns:
+        quadrant_acc[(weak_model, strong_model)] = {
+            'cc': (correct_count, total_count),
+            'cw': (correct_count, total_count),
+            'wc': (correct_count, total_count),
+            'ww': (correct_count, total_count)
+        }
+    """
+
+    quadrant_acc = {}
+
+    for w_model in weak_models:
+        for s_model in strong_models:
+            # Initialize per-quadrant aggregator
+            quadrant_acc[(w_model, s_model)] = {
+                'cc': {'correct': 0, 'total': 0},
+                'cw': {'correct': 0, 'total': 0},
+                'wc': {'correct': 0, 'total': 0},
+                'ww': {'correct': 0, 'total': 0}
+            }
+
+            # Go through each dataset and accumulate
+            for dset in datasets_list:
+                dsref1 = preds_dict[(w_model, s_model)][dset][mref1][split]  # list of {"labels", "pred"}
+                dsref2 = preds_dict[(w_model, s_model)][dset][mref2][split]
+                dsmain = preds_dict[(w_model, s_model)][dset][macc][split]
+
+                # We assume acc_buckets returns something like:
+                # {
+                #   'cc': {'correct': X, 'total': Y},
+                #   'cw': {'correct': X, 'total': Y},
+                #   'wc': {'correct': X, 'total': Y},
+                #   'ww': {'correct': X, 'total': Y}
+                # }
+                bckt = acc_buckets(dsref1, dsref2, dsmain)
+                
+                # Accumulate
+                for q in ['cc','cw','wc','ww']:
+                    quadrant_acc[(w_model, s_model)][q]['correct'] += bckt[q]['correct']
+                    quadrant_acc[(w_model, s_model)][q]['total']   += bckt[q]['total']
+
+    return quadrant_acc
 
 def compute_diff_matrix_for_dataset_single_pair(preds, folder_path, dataset, model_names, split, diff_func, diff_func_name):
     """
@@ -444,6 +700,7 @@ def compute_average_accuracies(preds_dict, folder_name, datasets, model_names, s
     """
     Compute average accuracies using precomputed_accs.
     """
+    acc_list = {m : [] for m in model_names}
     acc_sums = {m: {d:0 for d in datasets} for m in model_names}
     count = 0
     for (weak_model, strong_model), preds in preds_dict.items():
@@ -454,6 +711,7 @@ def compute_average_accuracies(preds_dict, folder_name, datasets, model_names, s
             accs = precomputed_accs(preds, f"{folder_name}/{weak_model}___{strong_model}", d, model_names, split)
             for m in model_names:
                 acc_sums[m][d] += accs[m]
+                acc_list[m].append(accs[m])
         count += 1
 
     if count == 0:
@@ -462,9 +720,75 @@ def compute_average_accuracies(preds_dict, folder_name, datasets, model_names, s
     for m in model_names:
         for d in datasets:
             acc_sums[m][d] /= count
+        print(f"{m}: {np.mean(acc_list[m]):.4f} (n={len(acc_list[m])})")
     
     return acc_sums
 
+def bootstrap_mname_accs(preds_dict, datasets, model_names, skip_list, split='test', n_bootstraps=1000):
+    """
+    Computes bootstrapped accuracies for multiple models and datasets,
+    skipping any (weak_model, strong_model) pairs in skip_list.
+    """
+    # -----------------------------------------------------------------------
+    # 1) Precompute label/pred arrays for every (weak_model, strong_model, dataset, model_name)
+    # -----------------------------------------------------------------------
+    data_arrays = {}
+    for (weak_model, strong_model), preds_by_dataset in preds_dict.items():
+        # Skip if user doesn't want these models
+        if (weak_model, strong_model) in skip_list:
+            continue
+        
+        for d in datasets:
+            for m in model_names:
+                # preds_by_dataset[d][m][split] is presumably a list of dicts
+                # e.g. [{"labels": ..., "soft_pred": ...}, ...]
+                ds = preds_by_dataset[d][m][split]
+
+                # Convert once to arrays
+                labels = np.array([x["labels"] for x in ds])
+                soft_preds = np.array([x["soft_pred"] for x in ds])
+                
+                # Store in a lookup dict
+                data_arrays[(weak_model, strong_model, d, m)] = (labels, soft_preds)
+    
+    # -----------------------------------------------------------------------
+    # 2) Bootstrap loop
+    # -----------------------------------------------------------------------
+    # We'll accumulate the mean accuracy for each model_name across all datasets and model-pairs
+    bootstraps = {m: [] for m in model_names}
+
+    for _ in tqdm(range(n_bootstraps)):
+        # For each bootstrap iteration, keep a running list of accuracies per model
+        acc_list = {m: [] for m in model_names}
+        
+        # Loop over all model pairs and datasets
+        for (weak_model, strong_model), preds_by_dataset in preds_dict.items():
+            if (weak_model, strong_model) in skip_list:
+                continue
+            
+            for d in datasets:
+                for m in model_names:
+                    labels, soft_preds = data_arrays[(weak_model, strong_model, d, m)]
+                    n = len(labels)
+                    
+                    # Sample indices with replacement
+                    idxs = np.random.randint(0, n, size=n)
+                    
+                    # Compute accuracy for this bootstrap sample
+                    acc = np.mean(labels[idxs] == (soft_preds[idxs] > 0.5)) * 100
+                    acc_list[m].append(acc)
+        
+        # Take the average across all datasets/model-pairs for each model
+        for m in model_names:
+            bootstraps[m].append(np.mean(acc_list[m]))
+    
+    # -----------------------------------------------------------------------
+    # 3) Print results
+    # -----------------------------------------------------------------------
+    for m in model_names:
+        mean_acc = np.mean(bootstraps[m])
+        std_acc = np.std(bootstraps[m], ddof=1)
+        print(f"{m}: mean = {mean_acc:.4f}, stdev = {std_acc:.4f}")
 
 def compute_average_metric_pairs(preds_dict, folder_name, datasets, diff_func, diff_func_name, skip_list, split='test', m1="weak_ft", m2="strong_base", m3="w2s"):
     """
@@ -543,146 +867,181 @@ if __name__ == "__main__":
     mode = sys.argv[1] if len(sys.argv) > 1 else "all"  # default "all"
     
     folder_name = "epochs_3"
-    model_names = ["weak_ft", "weak2", "strong_base", "strong_base2", "mean", "w2s", "w2snaive", "strong_ft", "strong2", "diff_ceil"]
-    m1_name, m2_name, m3_name = "weak_ft", "weak2", "w2s"
-    mtriplet_name = "w_w2_w2s"
+    # model_names = ["weak_ft", "weak2", "strong_base", "strong_base2", "mean", "w2s", "w2snaive", "strong_ft", "strong2", "diff_ceil"]
+    model_names = ["weak_ft", "strong_base2", "strong2", "w2s", "diff_ceil"]
+    m1_name, m2_name, m3_name = "weak_ft", "strong2", "w2s"
+    mtriplet_name = "strft2"
     # If you only want a subset, uncomment below:
     # model_names = ["weak_ft", "strong_base", "w2s", "strong_ft"]
     split = "test"
     datasplits = [split]
-    datasets = ["anli-r2", "boolq", "cola", "ethics-utilitarianism", "sciq", "sst2", "twitter-sentiment"]
-    skip_list = [("gemma-2-9b", "Llama-3.1-8B"), ("Llama-3.1-8B", "gemma-2-9b"), ("Llama-3.1-8B", "Llama-3.1-8B"), ("Qwen2.5-0.5B", "OLMo-2-1124-7B"), ("Qwen2.5-0.5B", "Qwen2.5-14B"), ("Qwen2.5-0.5B", "gemma-2-27b"), ("Qwen2.5-0.5B", "granite-3.0-8b-base"), ("gemma-2-2b", "OLMo-2-1124-7B")]
-
+    datasets = ["anli-r2", "boolq", "cola", "ethics-utilitarianism", "sciq", "sst2", "twitter-sentiment", "dream", "mc_taco", "multirc", "quail", "quartz", "social_i_qa", "wic", "cosmos_qa"]
+    skip_list = [("gemma-2-9b", "Llama-3.1-8B"), ("Llama-3.1-8B", "gemma-2-9b"), ("Llama-3.1-8B", "Llama-3.1-8B"), ("Qwen2.5-0.5B", "OLMo-2-1124-7B"), ("Qwen2.5-0.5B", "Qwen2.5-14B"), ("Qwen2.5-0.5B", "gemma-2-27b"), ("Qwen2.5-0.5B", "granite-3.0-8b-base"), ("gemma-2-2b", "OLMo-2-1124-7B"), ("SmolLM-1.7B", "gemma-2-9b"), ("SmolLM-1.7B", "Qwen2.5-7B"), ("SmolLM-1.7B", "Llama-3.1-8B")]
+    average_across_datasets = True
+    weak_models = ["gemma-2-2b", "Qwen2.5-0.5B", "Llama-3.2-1B", "phi-2"]
+    strong_models = ["gemma-2-9b", "Qwen2.5-7B", "Llama-3.1-8B"]
     preds_dict = get_preds_all_modelpairs(folder_name, model_names, datasplits=datasplits, datasets=datasets, skip_list=skip_list)
 
     if mode == "average":
         os.makedirs(f"results/{folder_name}/plots/{mtriplet_name}", exist_ok=True)
-        # Compute averages across model pairs using precomputed values
+
         avg_acc = compute_average_accuracies(preds_dict, folder_name, datasets, model_names, skip_list, split=split)
-        grouped_bar_plot_accs(avg_acc, split=split, metric_name="Accuracy", savepath=f"results/{folder_name}/averaged_grouped_bar_plot_accs_{split}.png", datasets_list=datasets)
+        # bootstrap_mname_accs(preds_dict, datasets, model_names, skip_list, split=split, n_bootstraps=1000)
 
-        averaged_buckets = compute_confusion_buckets_for_average(
-            preds_dict,
-            datasets,
-            mref1=m1_name,
-            mref2=m2_name,
-            macc=m3_name,
-            split=split,
-            skip_list=skip_list
-        )
+        # quadrant_acc = compute_per_pair_quadrant_accuracies(
+        #     preds_dict,
+        #     datasets_list=datasets, 
+        #     weak_models=weak_models,
+        #     strong_models=strong_models,
+        #     mref1=m1_name,
+        #     mref2=m2_name,
+        #     macc=m3_name,
+        #     split="test"
+        # )
+        
+        # plot_quadrants_with_subrects(
+        #     quadrant_acc,
+        #     weak_models=weak_models,
+        #     strong_models=strong_models,
+        #     mref1="Weak Supervisor",
+        #     mref2="Strong Elicited",
+        #     macc="Weak to Strong Trained Model",
+        #     title_prefix="Disentangling Accuracy of Weak to Strong Trained Model",
+        #     savepath=f"results/{folder_name}/plots/{mtriplet_name}/new_conf_mat_accs_{split}.png",
+        # )
 
-        # Plot averaged confusion matrices
-        plot_conf_mat_from_buckets(
-            averaged_buckets,
-            datasets,
-            mref1=m1_name,
-            mref2=m2_name,
-            macc=m3_name,
-            savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_conf_mat_accs_{split}.png"
-        )
 
-        # JSD
-        avg_jsd_pairs = compute_average_metric_pairs(preds_dict, folder_name, datasets, get_jsd, "JSD", skip_list, split=split, m1=m1_name, m2=m2_name, m3=m3_name)
-        plot_diff_metric_from_values(avg_jsd_pairs, datasets, "JSD", savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_jsd_{split}.png")
+        # Compute averages across model pairs using precomputed values
 
-        # Kappa
-        avg_kappa_pairs = compute_average_metric_pairs(preds_dict, folder_name, datasets, get_kappa_mcqs, "Kappa", skip_list, split=split, m1=m1_name, m2=m2_name, m3=m3_name)
-        plot_diff_metric_from_values(avg_kappa_pairs, datasets, "Kappa", savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_kappa_{split}.png")
+        # bootstrap_mname_accs(preds_dict, datasets, model_names, skip_list, split=split, n_bootstraps=1000)
+        # grouped_bar_plot_accs(avg_acc, split=split, metric_name="Accuracy", savepath=f"results/{folder_name}/Daveraged_grouped_bar_plot_accs_{split}.png", datasets_list=datasets, average_across_datasets=average_across_datasets)
 
-        # Prediction Diff%
-        avg_diffp_pairs = compute_average_metric_pairs(preds_dict, folder_name, datasets, get_diffp, "Prediction Diff%", skip_list, split=split, m1=m1_name, m2=m2_name, m3=m3_name)
-        plot_diff_metric_from_values(avg_diffp_pairs, datasets, "Prediction Diff%", savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_diffp_{split}.png")
+        # averaged_buckets = compute_confusion_buckets_for_average(
+        #     preds_dict,
+        #     datasets,
+        #     mref1=m1_name,
+        #     mref2=m2_name,
+        #     macc=m3_name,
+        #     split=split,
+        #     skip_list=skip_list
+        # )
 
-        # JSD Triangles
-        avg_jsd_triangles = compute_average_jsd_triangles(preds_dict, folder_name, datasets, skip_list, split=split, m1=m1_name, m2=m2_name, m3=m3_name)
-        plot_multiple_triangles_from_values(avg_jsd_triangles, datasets, padding=0.3, savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_jsdtriangles_{split}.png", m1name=m1_name, m2name=m2_name, m3name=m3_name)
+        # # Plot averaged confusion matrices
+        # plot_conf_mat_from_buckets(
+        #     averaged_buckets,
+        #     datasets,
+        #     mref1=m1_name,
+        #     mref2=m2_name,
+        #     macc=m3_name,
+        #     savepath=f"results/{folder_name}/plots/{mtriplet_name}/Daveraged_conf_mat_accs_{split}.png",
+        #     average_across_datasets=average_across_datasets
+        # )
 
-        for diff_func, diff_func_name in [(get_jsd, "JSD"), (get_kappa_mcqs, "Kappa"), (get_diffp, "Prediction Diff%")]:
-            diff_matrices = {}
-            for d in datasets:
-                mat = compute_diff_matrix_for_dataset_average(preds_dict, folder_name, d, model_names, split, diff_func, diff_func_name, skip_list)
-                if mat is not None:
-                    diff_matrices[d] = mat
+    #     # JSD
+    #     avg_jsd_pairs = compute_average_metric_pairs(preds_dict, folder_name, datasets, get_jsd, "JSD", skip_list, split=split, m1=m1_name, m2=m2_name, m3=m3_name)
+    #     plot_diff_metric_from_values(avg_jsd_pairs, datasets, "JSD", savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_jsd_{split}.png")
+
+        # avg_kappa_pairs = compute_average_metric_pairs(preds_dict, folder_name, datasets, get_probkappa_mcqs, "ProbKappa", skip_list, split=split, m1=m1_name, m2=m2_name, m3=m3_name)
+        # plot_diff_metric_from_values(avg_kappa_pairs, datasets, "ProbKappa", savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_probkappa_{split}.png")
+
+    #     # Kappa
+    #     avg_kappa_pairs = compute_average_metric_pairs(preds_dict, folder_name, datasets, get_kappa_mcqs, "Kappa", skip_list, split=split, m1=m1_name, m2=m2_name, m3=m3_name)
+    #     plot_diff_metric_from_values(avg_kappa_pairs, datasets, "Kappa", savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_kappa_{split}.png")
+
+    #     # Prediction Diff%
+    #     avg_diffp_pairs = compute_average_metric_pairs(preds_dict, folder_name, datasets, get_diffp, "Prediction Diff%", skip_list, split=split, m1=m1_name, m2=m2_name, m3=m3_name)
+    #     plot_diff_metric_from_values(avg_diffp_pairs, datasets, "Prediction Diff%", savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_diffp_{split}.png")
+
+    #     # JSD Triangles
+    #     avg_jsd_triangles = compute_average_jsd_triangles(preds_dict, folder_name, datasets, skip_list, split=split, m1=m1_name, m2=m2_name, m3=m3_name)
+    #     plot_multiple_triangles_from_values(avg_jsd_triangles, datasets, padding=0.3, savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_jsdtriangles_{split}.png", m1name=m1_name, m2name=m2_name, m3name=m3_name)
+
+    #     for diff_func, diff_func_name in [(get_jsd, "JSD"), (get_kappa_mcqs, "Kappa"), (get_diffp, "Prediction Diff%")]:
+    #         diff_matrices = {}
+    #         for d in datasets:
+    #             mat = compute_diff_matrix_for_dataset_average(preds_dict, folder_name, d, model_names, split, diff_func, diff_func_name, skip_list)
+    #             if mat is not None:
+    #                 diff_matrices[d] = mat
             
-            if diff_matrices:
-                heatmap_savepath = f"results/{folder_name}/plots/{mtriplet_name}/diffmatrix_averaged_{diff_func_name.lower().replace(' ','_')}_{split}.png"
-                plot_diff_matrices_subplots(diff_matrices, model_names, diff_func_name, savepath=heatmap_savepath)
-            else:
-                print(f"No data to plot for {diff_func_name} in average mode.")
+    #         if diff_matrices:
+    #             heatmap_savepath = f"results/{folder_name}/plots/{mtriplet_name}/diffmatrix_averaged_{diff_func_name.lower().replace(' ','_')}_{split}.png"
+    #             plot_diff_matrices_subplots(diff_matrices, model_names, diff_func_name, savepath=heatmap_savepath)
+    #         else:
+    #             print(f"No data to plot for {diff_func_name} in average mode.")
 
-    else:
-        # mode == "all": Plot separately for each model pair as originally implemented, but using precomputed values now
-        for (weak_model, strong_model), preds in preds_dict.items():
-            if (weak_model, strong_model) in skip_list:
-                continue
-            pair_folder = f"{folder_name}/{weak_model}___{strong_model}"
-            savepath = f"results/{pair_folder}/plots/{mtriplet_name}"
-            os.makedirs(savepath, exist_ok=True)
+    # else:
+    #     # mode == "all": Plot separately for each model pair as originally implemented, but using precomputed values now
+    #     for (weak_model, strong_model), preds in preds_dict.items():
+    #         if (weak_model, strong_model) in skip_list:
+    #             continue
+    #         pair_folder = f"{folder_name}/{weak_model}___{strong_model}"
+    #         savepath = f"results/{pair_folder}/plots/{mtriplet_name}"
+    #         os.makedirs(savepath, exist_ok=True)
 
-            for split in datasplits:
-                # Compute accuracies from precomputed
-                accs = {}
-                for d in datasets:
-                    acc_dict = precomputed_accs(preds, pair_folder, d, model_names, split)
-                    for m in acc_dict:
-                        if m not in accs:
-                            accs[m] = []
-                        accs[m].append(acc_dict[m])
+    #         for split in datasplits:
+    #             # Compute accuracies from precomputed
+    #             accs = {}
+    #             for d in datasets:
+    #                 acc_dict = precomputed_accs(preds, pair_folder, d, model_names, split)
+    #                 for m in acc_dict:
+    #                     if m not in accs:
+    #                         accs[m] = []
+    #                     accs[m].append(acc_dict[m])
 
-                grouped_bar_plot_accs(accs, split=split, metric_name="acc", savepath=f"{savepath}/grouped_bar_plot_accs_{split}.png", datasets_list=datasets)
-                # conf_mat_accs(preds, split=split, savepath=f"{savepath}/conf_mat_accs_{split}.png", datasets_list=datasets)
+    #             grouped_bar_plot_accs(accs, split=split, metric_name="acc", savepath=f"{savepath}/grouped_bar_plot_accs_{split}.png", datasets_list=datasets)
+    #             # conf_mat_accs(preds, split=split, savepath=f"{savepath}/conf_mat_accs_{split}.png", datasets_list=datasets)
 
-                single_buckets = compute_confusion_buckets_for_single_pair(
-                    preds,
-                    datasets,
-                    mref1=m1_name,
-                    mref2=m2_name,
-                    macc=m3_name,
-                    split=split
-                )
+    #             single_buckets = compute_confusion_buckets_for_single_pair(
+    #                 preds,
+    #                 datasets,
+    #                 mref1=m1_name,
+    #                 mref2=m2_name,
+    #                 macc=m3_name,
+    #                 split=split
+    #             )
 
-                # Plot confusion matrices for this pair
-                plot_conf_mat_from_buckets(
-                    single_buckets,
-                    datasets,
-                    mref1=m1_name,
-                    mref2=m2_name,
-                    macc=m3_name,
-                    savepath=f"{savepath}/conf_mat_accs_{split}.png"
-                )
+    #             # Plot confusion matrices for this pair
+    #             plot_conf_mat_from_buckets(
+    #                 single_buckets,
+    #                 datasets,
+    #                 mref1=m1_name,
+    #                 mref2=m2_name,
+    #                 macc=m3_name,
+    #                 savepath=f"{savepath}/conf_mat_accs_{split}.png"
+    #             )
 
-                def plot_single_pair_diff_metric_from_precomputed(diff_func, diff_func_name, metric_name, savepath, m1_name="weak_ft", m2_name="strong_base", m3_name="w2s"):
-                    pair_metrics = {f"{m1_name}-{m2_name}":[], f"{m2_name}-{m3_name}":[], f"{m1_name}-{m3_name}":[]}
-                    for d in datasets:
-                        val_w_s = precomputed_diffs(preds, pair_folder, d, split, diff_func, diff_func_name, m1_name, m2_name)
-                        val_s_w2s = precomputed_diffs(preds, pair_folder, d, split, diff_func, diff_func_name, m2_name, m3_name)
-                        val_w_w2s = precomputed_diffs(preds, pair_folder, d, split, diff_func, diff_func_name, m1_name, m3_name)
-                        pair_metrics[f"{m1_name}-{m2_name}"].append(val_w_s)
-                        pair_metrics[f"{m2_name}-{m3_name}"].append(val_s_w2s)
-                        pair_metrics[f"{m1_name}-{m3_name}"].append(val_w_w2s)
-                    plot_diff_metric_from_values(pair_metrics, datasets, metric_name, savepath=savepath)
+    #             def plot_single_pair_diff_metric_from_precomputed(diff_func, diff_func_name, metric_name, savepath, m1_name="weak_ft", m2_name="strong_base", m3_name="w2s"):
+    #                 pair_metrics = {f"{m1_name}-{m2_name}":[], f"{m2_name}-{m3_name}":[], f"{m1_name}-{m3_name}":[]}
+    #                 for d in datasets:
+    #                     val_w_s = precomputed_diffs(preds, pair_folder, d, split, diff_func, diff_func_name, m1_name, m2_name)
+    #                     val_s_w2s = precomputed_diffs(preds, pair_folder, d, split, diff_func, diff_func_name, m2_name, m3_name)
+    #                     val_w_w2s = precomputed_diffs(preds, pair_folder, d, split, diff_func, diff_func_name, m1_name, m3_name)
+    #                     pair_metrics[f"{m1_name}-{m2_name}"].append(val_w_s)
+    #                     pair_metrics[f"{m2_name}-{m3_name}"].append(val_s_w2s)
+    #                     pair_metrics[f"{m1_name}-{m3_name}"].append(val_w_w2s)
+    #                 plot_diff_metric_from_values(pair_metrics, datasets, metric_name, savepath=savepath)
 
-                # JSD
-                plot_single_pair_diff_metric_from_precomputed(get_jsd, "JSD", "JSD", f"{savepath}/jsd_{split}.png", m1_name=m1_name, m2_name=m2_name, m3_name=m3_name)
-                # Kappa
-                plot_single_pair_diff_metric_from_precomputed(get_kappa_mcqs, "Kappa", "Kappa", f"{savepath}/kappa_{split}.png", m1_name=m1_name, m2_name=m2_name, m3_name=m3_name)
-                # Prediction Diff%
-                plot_single_pair_diff_metric_from_precomputed(get_diffp, "Prediction Diff%", "Prediction Diff%", f"{savepath}/diffp_{split}.png", m1_name=m1_name, m2_name=m2_name, m3_name=m3_name)
+    #             # JSD
+    #             plot_single_pair_diff_metric_from_precomputed(get_jsd, "JSD", "JSD", f"{savepath}/jsd_{split}.png", m1_name=m1_name, m2_name=m2_name, m3_name=m3_name)
+    #             # Kappa
+    #             plot_single_pair_diff_metric_from_precomputed(get_kappa_mcqs, "Kappa", "Kappa", f"{savepath}/kappa_{split}.png", m1_name=m1_name, m2_name=m2_name, m3_name=m3_name)
+    #             # Prediction Diff%
+    #             plot_single_pair_diff_metric_from_precomputed(get_diffp, "Prediction Diff%", "Prediction Diff%", f"{savepath}/diffp_{split}.png", m1_name=m1_name, m2_name=m2_name, m3_name=m3_name)
 
-                # Triangles for single pair using precomputed diffs for JSD
-                jsd_values = {}
-                for d in datasets:
-                    jsd_w_s = precomputed_diffs(preds, pair_folder, d, split, get_jsd, "JSD", m1_name, m2_name)
-                    jsd_s_w2s = precomputed_diffs(preds, pair_folder, d, split, get_jsd, "JSD", m2_name, m3_name)
-                    jsd_w_w2s = precomputed_diffs(preds, pair_folder, d, split, get_jsd, "JSD", m1_name, m3_name)
-                    jsd_values[d] = (jsd_w_s, jsd_s_w2s, jsd_w_w2s)
+    #             # Triangles for single pair using precomputed diffs for JSD
+    #             jsd_values = {}
+    #             for d in datasets:
+    #                 jsd_w_s = precomputed_diffs(preds, pair_folder, d, split, get_jsd, "JSD", m1_name, m2_name)
+    #                 jsd_s_w2s = precomputed_diffs(preds, pair_folder, d, split, get_jsd, "JSD", m2_name, m3_name)
+    #                 jsd_w_w2s = precomputed_diffs(preds, pair_folder, d, split, get_jsd, "JSD", m1_name, m3_name)
+    #                 jsd_values[d] = (jsd_w_s, jsd_s_w2s, jsd_w_w2s)
 
-                plot_multiple_triangles_from_values(jsd_values, datasets, padding=0.3, savepath=f"{savepath}/jsdtriangles_{split}.png", m1name=m1_name, m2name=m2_name, m3name=m3_name)
+    #             plot_multiple_triangles_from_values(jsd_values, datasets, padding=0.3, savepath=f"{savepath}/jsdtriangles_{split}.png", m1name=m1_name, m2name=m2_name, m3name=m3_name)
 
-                for diff_func, diff_func_name in [(get_jsd, "JSD"), (get_kappa_mcqs, "Kappa"), (get_diffp, "Prediction Diff%")]:
-                    diff_matrices = {}
-                    for d in datasets:
-                        diff_matrix = compute_diff_matrix_for_dataset_single_pair(preds, pair_folder, d, model_names, split, diff_func, diff_func_name)
-                        diff_matrices[d] = diff_matrix
-                    heatmap_savepath = f"{savepath}/diffmatrix_{diff_func_name.lower().replace(' ','_')}_{split}.png"
-                    plot_diff_matrices_subplots(diff_matrices, model_names, diff_func_name, savepath=heatmap_savepath)
+    #             for diff_func, diff_func_name in [(get_jsd, "JSD"), (get_kappa_mcqs, "Kappa"), (get_diffp, "Prediction Diff%")]:
+    #                 diff_matrices = {}
+    #                 for d in datasets:
+    #                     diff_matrix = compute_diff_matrix_for_dataset_single_pair(preds, pair_folder, d, model_names, split, diff_func, diff_func_name)
+    #                     diff_matrices[d] = diff_matrix
+    #                 heatmap_savepath = f"{savepath}/diffmatrix_{diff_func_name.lower().replace(' ','_')}_{split}.png"
+    #                 plot_diff_matrices_subplots(diff_matrices, model_names, diff_func_name, savepath=heatmap_savepath)

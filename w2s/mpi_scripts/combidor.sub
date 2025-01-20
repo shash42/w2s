@@ -15,7 +15,6 @@ request_cpus = 2
 request_gpus = 1
 requirements = (TARGET.CUDADeviceName == "NVIDIA A100-SXM4-80GB")
 
-# datasets = anli-r2 sciq cola ethics-utilitarianism piqa sst2 twitter-sentiment boolq 
-# datasets = dream mc_taco multirc quail quartz social_i_qa wic cosmos_qa 
+datasets = anli-r2 sciq cola ethics-utilitarianism piqa sst2 twitter-sentiment boolq dream mc_taco multirc quail quartz social_i_qa wic cosmos_qa 
 
 queue dataset, weak_model, strong_model, sanitized_weak_model, sanitized_strong_model from combinations_d2.txt

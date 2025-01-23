@@ -878,7 +878,7 @@ if __name__ == "__main__":
     datasets = ["anli-r2", "boolq", "cola", "ethics-utilitarianism", "sciq", "sst2", "twitter-sentiment", "dream", "mc_taco", "multirc", "quail", "quartz", "social_i_qa", "wic", "cosmos_qa"]
     skip_list = [("gemma-2-9b", "Llama-3.1-8B"), ("Llama-3.1-8B", "gemma-2-9b"), ("Llama-3.1-8B", "Llama-3.1-8B"), ("Qwen2.5-0.5B", "OLMo-2-1124-7B"), ("Qwen2.5-0.5B", "Qwen2.5-14B"), ("Qwen2.5-0.5B", "gemma-2-27b"), ("Qwen2.5-0.5B", "granite-3.0-8b-base"), ("gemma-2-2b", "OLMo-2-1124-7B"), ("SmolLM-1.7B", "gemma-2-9b"), ("SmolLM-1.7B", "Qwen2.5-7B"), ("SmolLM-1.7B", "Llama-3.1-8B")]
     average_across_datasets = True
-    weak_models = ["gemma-2-2b", "Qwen2.5-0.5B", "Llama-3.2-1B", "phi-2"]
+    weak_models = ["gemma-2-2b", "Qwen2.5-1.5B", "Llama-3.2-1B", "phi-2"]
     strong_models = ["gemma-2-9b", "Qwen2.5-7B", "Llama-3.1-8B"]
     preds_dict = get_preds_all_modelpairs(folder_name, model_names, datasplits=datasplits, datasets=datasets, skip_list=skip_list)
 
@@ -914,134 +914,134 @@ if __name__ == "__main__":
         # Compute averages across model pairs using precomputed values
 
         # bootstrap_mname_accs(preds_dict, datasets, model_names, skip_list, split=split, n_bootstraps=1000)
-        # grouped_bar_plot_accs(avg_acc, split=split, metric_name="Accuracy", savepath=f"results/{folder_name}/Daveraged_grouped_bar_plot_accs_{split}.png", datasets_list=datasets, average_across_datasets=average_across_datasets)
+        grouped_bar_plot_accs(avg_acc, split=split, metric_name="Accuracy", savepath=f"results/{folder_name}/Daveraged_grouped_bar_plot_accs_{split}.png", datasets_list=datasets, average_across_datasets=average_across_datasets)
 
-        # averaged_buckets = compute_confusion_buckets_for_average(
-        #     preds_dict,
-        #     datasets,
-        #     mref1=m1_name,
-        #     mref2=m2_name,
-        #     macc=m3_name,
-        #     split=split,
-        #     skip_list=skip_list
-        # )
+        averaged_buckets = compute_confusion_buckets_for_average(
+            preds_dict,
+            datasets,
+            mref1=m1_name,
+            mref2=m2_name,
+            macc=m3_name,
+            split=split,
+            skip_list=skip_list
+        )
 
-        # # Plot averaged confusion matrices
-        # plot_conf_mat_from_buckets(
-        #     averaged_buckets,
-        #     datasets,
-        #     mref1=m1_name,
-        #     mref2=m2_name,
-        #     macc=m3_name,
-        #     savepath=f"results/{folder_name}/plots/{mtriplet_name}/Daveraged_conf_mat_accs_{split}.png",
-        #     average_across_datasets=average_across_datasets
-        # )
+        # Plot averaged confusion matrices
+        plot_conf_mat_from_buckets(
+            averaged_buckets,
+            datasets,
+            mref1=m1_name,
+            mref2=m2_name,
+            macc=m3_name,
+            savepath=f"results/{folder_name}/plots/{mtriplet_name}/Daveraged_conf_mat_accs_{split}.png",
+            average_across_datasets=average_across_datasets
+        )
 
-    #     # JSD
-    #     avg_jsd_pairs = compute_average_metric_pairs(preds_dict, folder_name, datasets, get_jsd, "JSD", skip_list, split=split, m1=m1_name, m2=m2_name, m3=m3_name)
-    #     plot_diff_metric_from_values(avg_jsd_pairs, datasets, "JSD", savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_jsd_{split}.png")
+        # JSD
+        avg_jsd_pairs = compute_average_metric_pairs(preds_dict, folder_name, datasets, get_jsd, "JSD", skip_list, split=split, m1=m1_name, m2=m2_name, m3=m3_name)
+        plot_diff_metric_from_values(avg_jsd_pairs, datasets, "JSD", savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_jsd_{split}.png")
 
-        # avg_kappa_pairs = compute_average_metric_pairs(preds_dict, folder_name, datasets, get_probkappa_mcqs, "ProbKappa", skip_list, split=split, m1=m1_name, m2=m2_name, m3=m3_name)
-        # plot_diff_metric_from_values(avg_kappa_pairs, datasets, "ProbKappa", savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_probkappa_{split}.png")
+        avg_kappa_pairs = compute_average_metric_pairs(preds_dict, folder_name, datasets, get_probkappa_mcqs, "ProbKappa", skip_list, split=split, m1=m1_name, m2=m2_name, m3=m3_name)
+        plot_diff_metric_from_values(avg_kappa_pairs, datasets, "ProbKappa", savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_probkappa_{split}.png")
 
-    #     # Kappa
-    #     avg_kappa_pairs = compute_average_metric_pairs(preds_dict, folder_name, datasets, get_kappa_mcqs, "Kappa", skip_list, split=split, m1=m1_name, m2=m2_name, m3=m3_name)
-    #     plot_diff_metric_from_values(avg_kappa_pairs, datasets, "Kappa", savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_kappa_{split}.png")
+        # Kappa
+        avg_kappa_pairs = compute_average_metric_pairs(preds_dict, folder_name, datasets, get_kappa_mcqs, "Kappa", skip_list, split=split, m1=m1_name, m2=m2_name, m3=m3_name)
+        plot_diff_metric_from_values(avg_kappa_pairs, datasets, "Kappa", savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_kappa_{split}.png")
 
-    #     # Prediction Diff%
-    #     avg_diffp_pairs = compute_average_metric_pairs(preds_dict, folder_name, datasets, get_diffp, "Prediction Diff%", skip_list, split=split, m1=m1_name, m2=m2_name, m3=m3_name)
-    #     plot_diff_metric_from_values(avg_diffp_pairs, datasets, "Prediction Diff%", savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_diffp_{split}.png")
+        # Prediction Diff%
+        avg_diffp_pairs = compute_average_metric_pairs(preds_dict, folder_name, datasets, get_diffp, "Prediction Diff%", skip_list, split=split, m1=m1_name, m2=m2_name, m3=m3_name)
+        plot_diff_metric_from_values(avg_diffp_pairs, datasets, "Prediction Diff%", savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_diffp_{split}.png")
 
-    #     # JSD Triangles
-    #     avg_jsd_triangles = compute_average_jsd_triangles(preds_dict, folder_name, datasets, skip_list, split=split, m1=m1_name, m2=m2_name, m3=m3_name)
-    #     plot_multiple_triangles_from_values(avg_jsd_triangles, datasets, padding=0.3, savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_jsdtriangles_{split}.png", m1name=m1_name, m2name=m2_name, m3name=m3_name)
+        # JSD Triangles
+        avg_jsd_triangles = compute_average_jsd_triangles(preds_dict, folder_name, datasets, skip_list, split=split, m1=m1_name, m2=m2_name, m3=m3_name)
+        plot_multiple_triangles_from_values(avg_jsd_triangles, datasets, padding=0.3, savepath=f"results/{folder_name}/plots/{mtriplet_name}/averaged_jsdtriangles_{split}.png", m1name=m1_name, m2name=m2_name, m3name=m3_name)
 
-    #     for diff_func, diff_func_name in [(get_jsd, "JSD"), (get_kappa_mcqs, "Kappa"), (get_diffp, "Prediction Diff%")]:
-    #         diff_matrices = {}
-    #         for d in datasets:
-    #             mat = compute_diff_matrix_for_dataset_average(preds_dict, folder_name, d, model_names, split, diff_func, diff_func_name, skip_list)
-    #             if mat is not None:
-    #                 diff_matrices[d] = mat
+        for diff_func, diff_func_name in [(get_jsd, "JSD"), (get_kappa_mcqs, "Kappa"), (get_diffp, "Prediction Diff%")]:
+            diff_matrices = {}
+            for d in datasets:
+                mat = compute_diff_matrix_for_dataset_average(preds_dict, folder_name, d, model_names, split, diff_func, diff_func_name, skip_list)
+                if mat is not None:
+                    diff_matrices[d] = mat
             
-    #         if diff_matrices:
-    #             heatmap_savepath = f"results/{folder_name}/plots/{mtriplet_name}/diffmatrix_averaged_{diff_func_name.lower().replace(' ','_')}_{split}.png"
-    #             plot_diff_matrices_subplots(diff_matrices, model_names, diff_func_name, savepath=heatmap_savepath)
-    #         else:
-    #             print(f"No data to plot for {diff_func_name} in average mode.")
+            if diff_matrices:
+                heatmap_savepath = f"results/{folder_name}/plots/{mtriplet_name}/diffmatrix_averaged_{diff_func_name.lower().replace(' ','_')}_{split}.png"
+                plot_diff_matrices_subplots(diff_matrices, model_names, diff_func_name, savepath=heatmap_savepath)
+            else:
+                print(f"No data to plot for {diff_func_name} in average mode.")
 
-    # else:
-    #     # mode == "all": Plot separately for each model pair as originally implemented, but using precomputed values now
-    #     for (weak_model, strong_model), preds in preds_dict.items():
-    #         if (weak_model, strong_model) in skip_list:
-    #             continue
-    #         pair_folder = f"{folder_name}/{weak_model}___{strong_model}"
-    #         savepath = f"results/{pair_folder}/plots/{mtriplet_name}"
-    #         os.makedirs(savepath, exist_ok=True)
+    else:
+        # mode == "all": Plot separately for each model pair as originally implemented, but using precomputed values now
+        for (weak_model, strong_model), preds in preds_dict.items():
+            if (weak_model, strong_model) in skip_list:
+                continue
+            pair_folder = f"{folder_name}/{weak_model}___{strong_model}"
+            savepath = f"results/{pair_folder}/plots/{mtriplet_name}"
+            os.makedirs(savepath, exist_ok=True)
 
-    #         for split in datasplits:
-    #             # Compute accuracies from precomputed
-    #             accs = {}
-    #             for d in datasets:
-    #                 acc_dict = precomputed_accs(preds, pair_folder, d, model_names, split)
-    #                 for m in acc_dict:
-    #                     if m not in accs:
-    #                         accs[m] = []
-    #                     accs[m].append(acc_dict[m])
+            for split in datasplits:
+                # Compute accuracies from precomputed
+                accs = {}
+                for d in datasets:
+                    acc_dict = precomputed_accs(preds, pair_folder, d, model_names, split)
+                    for m in acc_dict:
+                        if m not in accs:
+                            accs[m] = []
+                        accs[m].append(acc_dict[m])
 
-    #             grouped_bar_plot_accs(accs, split=split, metric_name="acc", savepath=f"{savepath}/grouped_bar_plot_accs_{split}.png", datasets_list=datasets)
-    #             # conf_mat_accs(preds, split=split, savepath=f"{savepath}/conf_mat_accs_{split}.png", datasets_list=datasets)
+                grouped_bar_plot_accs(accs, split=split, metric_name="acc", savepath=f"{savepath}/grouped_bar_plot_accs_{split}.png", datasets_list=datasets)
+                # conf_mat_accs(preds, split=split, savepath=f"{savepath}/conf_mat_accs_{split}.png", datasets_list=datasets)
 
-    #             single_buckets = compute_confusion_buckets_for_single_pair(
-    #                 preds,
-    #                 datasets,
-    #                 mref1=m1_name,
-    #                 mref2=m2_name,
-    #                 macc=m3_name,
-    #                 split=split
-    #             )
+                single_buckets = compute_confusion_buckets_for_single_pair(
+                    preds,
+                    datasets,
+                    mref1=m1_name,
+                    mref2=m2_name,
+                    macc=m3_name,
+                    split=split
+                )
 
-    #             # Plot confusion matrices for this pair
-    #             plot_conf_mat_from_buckets(
-    #                 single_buckets,
-    #                 datasets,
-    #                 mref1=m1_name,
-    #                 mref2=m2_name,
-    #                 macc=m3_name,
-    #                 savepath=f"{savepath}/conf_mat_accs_{split}.png"
-    #             )
+                # Plot confusion matrices for this pair
+                plot_conf_mat_from_buckets(
+                    single_buckets,
+                    datasets,
+                    mref1=m1_name,
+                    mref2=m2_name,
+                    macc=m3_name,
+                    savepath=f"{savepath}/conf_mat_accs_{split}.png"
+                )
 
-    #             def plot_single_pair_diff_metric_from_precomputed(diff_func, diff_func_name, metric_name, savepath, m1_name="weak_ft", m2_name="strong_base", m3_name="w2s"):
-    #                 pair_metrics = {f"{m1_name}-{m2_name}":[], f"{m2_name}-{m3_name}":[], f"{m1_name}-{m3_name}":[]}
-    #                 for d in datasets:
-    #                     val_w_s = precomputed_diffs(preds, pair_folder, d, split, diff_func, diff_func_name, m1_name, m2_name)
-    #                     val_s_w2s = precomputed_diffs(preds, pair_folder, d, split, diff_func, diff_func_name, m2_name, m3_name)
-    #                     val_w_w2s = precomputed_diffs(preds, pair_folder, d, split, diff_func, diff_func_name, m1_name, m3_name)
-    #                     pair_metrics[f"{m1_name}-{m2_name}"].append(val_w_s)
-    #                     pair_metrics[f"{m2_name}-{m3_name}"].append(val_s_w2s)
-    #                     pair_metrics[f"{m1_name}-{m3_name}"].append(val_w_w2s)
-    #                 plot_diff_metric_from_values(pair_metrics, datasets, metric_name, savepath=savepath)
+                def plot_single_pair_diff_metric_from_precomputed(diff_func, diff_func_name, metric_name, savepath, m1_name="weak_ft", m2_name="strong_base", m3_name="w2s"):
+                    pair_metrics = {f"{m1_name}-{m2_name}":[], f"{m2_name}-{m3_name}":[], f"{m1_name}-{m3_name}":[]}
+                    for d in datasets:
+                        val_w_s = precomputed_diffs(preds, pair_folder, d, split, diff_func, diff_func_name, m1_name, m2_name)
+                        val_s_w2s = precomputed_diffs(preds, pair_folder, d, split, diff_func, diff_func_name, m2_name, m3_name)
+                        val_w_w2s = precomputed_diffs(preds, pair_folder, d, split, diff_func, diff_func_name, m1_name, m3_name)
+                        pair_metrics[f"{m1_name}-{m2_name}"].append(val_w_s)
+                        pair_metrics[f"{m2_name}-{m3_name}"].append(val_s_w2s)
+                        pair_metrics[f"{m1_name}-{m3_name}"].append(val_w_w2s)
+                    plot_diff_metric_from_values(pair_metrics, datasets, metric_name, savepath=savepath)
 
-    #             # JSD
-    #             plot_single_pair_diff_metric_from_precomputed(get_jsd, "JSD", "JSD", f"{savepath}/jsd_{split}.png", m1_name=m1_name, m2_name=m2_name, m3_name=m3_name)
-    #             # Kappa
-    #             plot_single_pair_diff_metric_from_precomputed(get_kappa_mcqs, "Kappa", "Kappa", f"{savepath}/kappa_{split}.png", m1_name=m1_name, m2_name=m2_name, m3_name=m3_name)
-    #             # Prediction Diff%
-    #             plot_single_pair_diff_metric_from_precomputed(get_diffp, "Prediction Diff%", "Prediction Diff%", f"{savepath}/diffp_{split}.png", m1_name=m1_name, m2_name=m2_name, m3_name=m3_name)
+                # JSD
+                plot_single_pair_diff_metric_from_precomputed(get_jsd, "JSD", "JSD", f"{savepath}/jsd_{split}.png", m1_name=m1_name, m2_name=m2_name, m3_name=m3_name)
+                # Kappa
+                plot_single_pair_diff_metric_from_precomputed(get_kappa_mcqs, "Kappa", "Kappa", f"{savepath}/kappa_{split}.png", m1_name=m1_name, m2_name=m2_name, m3_name=m3_name)
+                # Prediction Diff%
+                plot_single_pair_diff_metric_from_precomputed(get_diffp, "Prediction Diff%", "Prediction Diff%", f"{savepath}/diffp_{split}.png", m1_name=m1_name, m2_name=m2_name, m3_name=m3_name)
 
-    #             # Triangles for single pair using precomputed diffs for JSD
-    #             jsd_values = {}
-    #             for d in datasets:
-    #                 jsd_w_s = precomputed_diffs(preds, pair_folder, d, split, get_jsd, "JSD", m1_name, m2_name)
-    #                 jsd_s_w2s = precomputed_diffs(preds, pair_folder, d, split, get_jsd, "JSD", m2_name, m3_name)
-    #                 jsd_w_w2s = precomputed_diffs(preds, pair_folder, d, split, get_jsd, "JSD", m1_name, m3_name)
-    #                 jsd_values[d] = (jsd_w_s, jsd_s_w2s, jsd_w_w2s)
+                # Triangles for single pair using precomputed diffs for JSD
+                jsd_values = {}
+                for d in datasets:
+                    jsd_w_s = precomputed_diffs(preds, pair_folder, d, split, get_jsd, "JSD", m1_name, m2_name)
+                    jsd_s_w2s = precomputed_diffs(preds, pair_folder, d, split, get_jsd, "JSD", m2_name, m3_name)
+                    jsd_w_w2s = precomputed_diffs(preds, pair_folder, d, split, get_jsd, "JSD", m1_name, m3_name)
+                    jsd_values[d] = (jsd_w_s, jsd_s_w2s, jsd_w_w2s)
 
-    #             plot_multiple_triangles_from_values(jsd_values, datasets, padding=0.3, savepath=f"{savepath}/jsdtriangles_{split}.png", m1name=m1_name, m2name=m2_name, m3name=m3_name)
+                plot_multiple_triangles_from_values(jsd_values, datasets, padding=0.3, savepath=f"{savepath}/jsdtriangles_{split}.png", m1name=m1_name, m2name=m2_name, m3name=m3_name)
 
-    #             for diff_func, diff_func_name in [(get_jsd, "JSD"), (get_kappa_mcqs, "Kappa"), (get_diffp, "Prediction Diff%")]:
-    #                 diff_matrices = {}
-    #                 for d in datasets:
-    #                     diff_matrix = compute_diff_matrix_for_dataset_single_pair(preds, pair_folder, d, model_names, split, diff_func, diff_func_name)
-    #                     diff_matrices[d] = diff_matrix
-    #                 heatmap_savepath = f"{savepath}/diffmatrix_{diff_func_name.lower().replace(' ','_')}_{split}.png"
-    #                 plot_diff_matrices_subplots(diff_matrices, model_names, diff_func_name, savepath=heatmap_savepath)
+                for diff_func, diff_func_name in [(get_jsd, "JSD"), (get_kappa_mcqs, "Kappa"), (get_diffp, "Prediction Diff%")]:
+                    diff_matrices = {}
+                    for d in datasets:
+                        diff_matrix = compute_diff_matrix_for_dataset_single_pair(preds, pair_folder, d, model_names, split, diff_func, diff_func_name)
+                        diff_matrices[d] = diff_matrix
+                    heatmap_savepath = f"{savepath}/diffmatrix_{diff_func_name.lower().replace(' ','_')}_{split}.png"
+                    plot_diff_matrices_subplots(diff_matrices, model_names, diff_func_name, savepath=heatmap_savepath)

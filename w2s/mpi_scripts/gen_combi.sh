@@ -4,8 +4,8 @@
 datasets=("anli-r2" "sciq" "cola" "ethics-utilitarianism" "sst2" "twitter-sentiment" "boolq" "dream" "mc_taco" "multirc" "quail" "quartz" "social_i_qa" "wic" "cosmos_qa")
 # weak_models=("Qwen/Qwen2.5-1.5B" "google/gemma-2-2b" "microsoft/phi-2" "meta-llama/Llama-3.2-1B" "HuggingFaceTB/SmolLM-1.7B")
 weak_models=("meta-llama/Llama-3.2-3B")
-# strong_models=("google/gemma-2-9b" "Qwen/Qwen2.5-7B")
-strong_models=("meta-llama/Llama-3.1-8B")
+strong_models=("google/gemma-2-9b" "Qwen/Qwen2.5-7B")
+# strong_models=("meta-llama/Llama-3.1-8B")
 
 # Output file
 output_file="combinations_d2.txt"
